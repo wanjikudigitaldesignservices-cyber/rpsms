@@ -12,7 +12,11 @@ import {
   LogOut, 
   Database, 
   BookOpen, 
-  Search 
+  Search,
+  Briefcase,
+  Package,
+  CreditCard,
+  Crosshair
 } from 'lucide-react';
 import type { 
   Officer, 
@@ -26,7 +30,18 @@ import type {
   CustodyRecord,
   PropertyItem,
   WelfareLog,
-  ExitReason
+  ExitReason,
+  CaseRecord,
+  CaseNote,
+  EvidenceItem,
+  EvidenceTransfer,
+  EvidenceStatus,
+  BailRecord,
+  CashlessPayment,
+  ArmoryWeapon,
+  PatrolVehicle,
+  FuelLog,
+  CaseStatus
 } from '@/types';
 import { OfficerList } from '@/components/admin/OfficerList';
 import { OfficerOnboardingModal } from '@/components/admin/OfficerOnboardingModal';
@@ -45,6 +60,12 @@ import { PersonBookInFlow } from '@/components/custody/PersonBookInFlow';
 import { CustodyManagement } from '@/components/custody/CustodyManagement';
 import { GlobalForensicSearch } from '@/components/search/GlobalForensicSearch';
 
+// Phase 3 Components
+import { CaseManagement } from '@/components/cases/CaseManagement';
+import { EvidenceRegistry } from '@/components/evidence/EvidenceRegistry';
+import { CashlessBailCheckout } from '@/components/bail/CashlessBailCheckout';
+import { ArmoryAndVehicles } from '@/components/logistics/ArmoryAndVehicles';
+
 // Seed Data
 import { 
   INITIAL_CELLS, 
@@ -52,7 +73,16 @@ import {
   INITIAL_PERSONS, 
   INITIAL_CUSTODY_RECORDS, 
   INITIAL_PROPERTY_ITEMS, 
-  INITIAL_WELFARE_LOGS 
+  INITIAL_WELFARE_LOGS,
+  INITIAL_CASES,
+  INITIAL_CASE_NOTES,
+  INITIAL_EVIDENCE_ITEMS,
+  INITIAL_EVIDENCE_TRANSFERS,
+  INITIAL_BAIL_RECORDS,
+  INITIAL_PAYMENTS,
+  INITIAL_ARMORY_WEAPONS,
+  INITIAL_PATROL_VEHICLES,
+  INITIAL_FUEL_LOGS
 } from '@/lib/initialData';
 
 const INITIAL_STATION: StationSettingsData = {
@@ -253,7 +283,19 @@ const INITIAL_APPROVALS: ApprovalRequest[] = [
 
 export function App() {
   const [activeTab, setActiveTab] = useState<
-    'OB_ENTRIES' | 'CUSTODY' | 'BOOK_IN' | 'OFFICERS' | 'APPROVALS' | 'AUDIT' | 'ROLES' | 'SETTINGS' | 'SETUP'
+    | 'OB_ENTRIES'
+    | 'CUSTODY'
+    | 'BOOK_IN'
+    | 'CASES'
+    | 'EVIDENCE'
+    | 'BAIL'
+    | 'LOGISTICS'
+    | 'OFFICERS'
+    | 'APPROVALS'
+    | 'AUDIT'
+    | 'ROLES'
+    | 'SETTINGS'
+    | 'SETUP'
   >('OB_ENTRIES');
 
   // Core Data State
@@ -270,6 +312,17 @@ export function App() {
   const [custodyRecords, setCustodyRecords] = useState<CustodyRecord[]>(INITIAL_CUSTODY_RECORDS);
   const [propertyItems, setPropertyItems] = useState<PropertyItem[]>(INITIAL_PROPERTY_ITEMS);
   const [welfareLogs, setWelfareLogs] = useState<WelfareLog[]>(INITIAL_WELFARE_LOGS);
+
+  // Phase 3 Data State
+  const [cases, setCases] = useState<CaseRecord[]>(INITIAL_CASES);
+  const [caseNotes, setCaseNotes] = useState<CaseNote[]>(INITIAL_CASE_NOTES);
+  const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>(INITIAL_EVIDENCE_ITEMS);
+  const [evidenceTransfers, setEvidenceTransfers] = useState<EvidenceTransfer[]>(INITIAL_EVIDENCE_TRANSFERS);
+  const [bailRecords, setBailRecords] = useState<BailRecord[]>(INITIAL_BAIL_RECORDS);
+  const [payments, setPayments] = useState<CashlessPayment[]>(INITIAL_PAYMENTS);
+  const [weapons, setWeapons] = useState<ArmoryWeapon[]>(INITIAL_ARMORY_WEAPONS);
+  const [vehicles, setVehicles] = useState<PatrolVehicle[]>(INITIAL_PATROL_VEHICLES);
+  const [fuelLogs, setFuelLogs] = useState<FuelLog[]>(INITIAL_FUEL_LOGS);
 
   // Preselected OB Entry for direct Book-In navigation
   const [preselectedOBForBookIn, setPreselectedOBForBookIn] = useState<OBEntry | null>(null);
@@ -405,7 +458,6 @@ export function App() {
   }) => {
     const originalOB = obEntries.find((o) => o.id === obEntryId);
 
-    // Create Four-Eyes Approval Request
     const newApproval: ApprovalRequest = {
       id: crypto.randomUUID(),
       station_id: stationSettings.id,
@@ -422,7 +474,6 @@ export function App() {
 
     setApprovals((prev) => [newApproval, ...prev]);
 
-    // Mark original OB as under amendment review
     setObEntries((prev) =>
       prev.map((o) => (o.id === obEntryId ? { ...o, is_amended: true, status: 'AMENDED' } : o))
     );
@@ -451,18 +502,31 @@ export function App() {
     custodyRecord: CustodyRecord;
     propertyItems: PropertyItem[];
   }) => {
-    setPersons((prev) => [person, ...prev]);
-    setCustodyRecords((prev) => [custodyRecord, ...prev]);
-    setPropertyItems((prev) => [...newProps, ...prev]);
+    setPersons((prev) => {
+      const exists = prev.find((p) => p.id === person.id);
+      if (exists) {
+        return prev.map((p) => (p.id === person.id ? person : p));
+      }
+      return [person, ...prev];
+    });
 
-    // Increment cell occupants
+    setCustodyRecords((prev) => [custodyRecord, ...prev]);
+
+    if (newProps.length > 0) {
+      setPropertyItems((prev) => [...newProps, ...prev]);
+    }
+
     setCells((prev) =>
-      prev.map((c) => (c.id === custodyRecord.cell_id ? { ...c, current_occupants: c.current_occupants + 1 } : c))
+      prev.map((cell) =>
+        cell.cell_number === custodyRecord.cell_number
+          ? { ...cell, current_occupants: cell.current_occupants + 1 }
+          : cell
+      )
     );
 
     appendAuditLog(
-      'PERSON_BOOKED_IN',
-      `Detainee ${person.full_name} booked into Cell ${custodyRecord.cell_number}. Article 49 24-hour countdown engaged.`,
+      'PERSON_BOOKED_INTO_CUSTODY',
+      `Detainee ${person.full_name} lodged into Cell ${custodyRecord.cell_number} under OB ${custodyRecord.ob_number}. 24-Hour Constitutional clock activated.`,
       'custody_records',
       custodyRecord.id
     );
@@ -481,13 +545,12 @@ export function App() {
     custodyRecordId: string;
     exitReason: ExitReason;
     notes: string;
-    requiresFourEyes: boolean;
+    requiresFourEyes?: boolean;
   }) => {
     const targetCustody = custodyRecords.find((c) => c.id === custodyRecordId);
     if (!targetCustody) return;
 
-    if (requiresFourEyes) {
-      // Create Four-Eyes Approval Request
+    if (exitReason === 'RELEASED_WITHOUT_CHARGE' || requiresFourEyes) {
       const newApproval: ApprovalRequest = {
         id: crypto.randomUUID(),
         station_id: stationSettings.id,
@@ -513,7 +576,6 @@ export function App() {
       return;
     }
 
-    // Direct release (Bail, Charged to Court, Hospital, Transfer)
     setCustodyRecords((prev) =>
       prev.map((c) =>
         c.id === custodyRecordId
@@ -530,7 +592,6 @@ export function App() {
       )
     );
 
-    // Decrement cell occupants
     setCells((prev) =>
       prev.map((cell) =>
         cell.cell_number === targetCustody.cell_number
@@ -550,7 +611,6 @@ export function App() {
   // 6. Property Register Handlers
   const handleAddPropertyItem = (newItem: PropertyItem) => {
     setPropertyItems((prev) => [newItem, ...prev]);
-    // Increment count on custody record
     setCustodyRecords((prev) =>
       prev.map((c) =>
         c.id === newItem.custody_record_id ? { ...c, property_items_count: c.property_items_count + 1 } : c
@@ -611,7 +671,323 @@ export function App() {
     );
   };
 
-  // Approvals Inbox Handlers
+  /* =========================================================================
+     PHASE 3 HANDLERS: CASES, EVIDENCE, CASHLESS BAIL, ARMORY & LOGISTICS
+     ========================================================================= */
+
+  // 1. Cases Handlers
+  const handleCreateCase = (newCase: CaseRecord) => {
+    setCases((prev) => [newCase, ...prev]);
+    appendAuditLog(
+      'CASE_REGISTERED',
+      `Formal CID case file opened: ${newCase.case_number} (${newCase.crime_category}) linked to OB ${newCase.ob_number}`,
+      'cases',
+      newCase.id
+    );
+  };
+
+  const handleAssignIO = ({
+    caseId,
+    ioId,
+    ioName,
+    ioServiceNo,
+    method,
+    overrideReason,
+  }: {
+    caseId: string;
+    ioId: string;
+    ioName: string;
+    ioServiceNo: string;
+    method: 'RANDOM_FAIR' | 'OCS_OVERRIDE';
+    overrideReason?: string;
+  }) => {
+    setCases((prev) =>
+      prev.map((c) =>
+        c.id === caseId
+          ? {
+              ...c,
+              status: 'ASSIGNED',
+              assigned_io_id: ioId,
+              assigned_io_name: ioName,
+              assigned_io_service_no: ioServiceNo,
+              assigned_at: new Date().toISOString(),
+              assignment_method: method,
+              ocs_override_reason: overrideReason,
+            }
+          : c
+      )
+    );
+
+    appendAuditLog(
+      method === 'RANDOM_FAIR' ? 'IO_ASSIGNED_RANDOM_FAIR' : 'IO_ASSIGNED_OCS_OVERRIDE',
+      `Case ${caseId} assigned to ${ioName} (${ioServiceNo}) via ${method}.${overrideReason ? ` Reason: ${overrideReason}` : ''}`,
+      'cases',
+      caseId
+    );
+  };
+
+  const handleAddCaseNote = (newNote: CaseNote) => {
+    setCaseNotes((prev) => [newNote, ...prev]);
+    setCases((prev) =>
+      prev.map((c) =>
+        c.id === newNote.case_id ? { ...c, notes_count: c.notes_count + 1 } : c
+      )
+    );
+    appendAuditLog(
+      'CASE_NOTE_RECORDED',
+      `Investigation note (${newNote.note_type}) added to Case ${newNote.case_id} by ${newNote.author_service_no}`,
+      'case_notes',
+      newNote.id
+    );
+  };
+
+  const handleUpdateCaseStatus = (caseId: string, status: CaseStatus) => {
+    setCases((prev) =>
+      prev.map((c) => (c.id === caseId ? { ...c, status } : c))
+    );
+    appendAuditLog(
+      'CASE_STATUS_UPDATED',
+      `Case ${caseId} status updated to ${status} by ${activeOfficer.service_number}`,
+      'cases',
+      caseId
+    );
+  };
+
+  // 2. Evidence Handlers
+  const handleAddEvidence = (newEvidence: EvidenceItem) => {
+    setEvidenceItems((prev) => [newEvidence, ...prev]);
+    setCases((prev) =>
+      prev.map((c) =>
+        c.id === newEvidence.case_id ? { ...c, evidence_count: c.evidence_count + 1 } : c
+      )
+    );
+    appendAuditLog(
+      'EXHIBIT_REGISTERED',
+      `Exhibit ${newEvidence.exhibit_number} (${newEvidence.category}) sealed with QR ${newEvidence.qr_code_identifier}. Custodian: ${newEvidence.current_custodian_service_no}`,
+      'evidence_items',
+      newEvidence.id
+    );
+  };
+
+  const handleTransferEvidence = (
+    transfer: EvidenceTransfer,
+    updatedStatus: EvidenceStatus,
+    newLocation?: string
+  ) => {
+    setEvidenceTransfers((prev) => [transfer, ...prev]);
+    setEvidenceItems((prev) =>
+      prev.map((e) =>
+        e.id === transfer.evidence_id
+          ? {
+              ...e,
+              current_custodian_id: transfer.transferred_to_id,
+              current_custodian_name: transfer.transferred_to_name,
+              current_custodian_service_no: transfer.transferred_to_service_no,
+              status: updatedStatus,
+              storage_location: newLocation || e.storage_location,
+              transfers_count: e.transfers_count + 1,
+            }
+          : e
+      )
+    );
+    appendAuditLog(
+      'EXHIBIT_CUSTODY_TRANSFERRED',
+      `Exhibit custody transferred from ${transfer.transferred_from_service_no} to ${transfer.transferred_to_service_no}. Reason: ${transfer.transfer_reason}`,
+      'evidence_transfers',
+      transfer.id
+    );
+  };
+
+  const handleRequestDisposal = (evidenceId: string, courtOrderRef: string, reason: string) => {
+    const item = evidenceItems.find((e) => e.id === evidenceId);
+    const newApproval: ApprovalRequest = {
+      id: crypto.randomUUID(),
+      station_id: stationSettings.id,
+      action_type: 'EVIDENCE_DISPOSAL',
+      target_resource_type: 'evidence_items',
+      target_resource_id: evidenceId,
+      requested_by: activeOfficer.id,
+      requester_name: activeOfficer.full_name,
+      requester_service_number: activeOfficer.service_number,
+      requested_at: new Date().toISOString(),
+      justification: `Court-ordered disposal request for Exhibit ${item?.exhibit_number} under Court Order Ref: ${courtOrderRef}. Justification: ${reason}`,
+      status: 'PENDING',
+    };
+
+    setApprovals((prev) => [newApproval, ...prev]);
+    setEvidenceItems((prev) =>
+      prev.map((e) =>
+        e.id === evidenceId
+          ? { ...e, status: 'DISPOSAL_PENDING_APPROVAL', court_order_ref: courtOrderRef }
+          : e
+      )
+    );
+    appendAuditLog(
+      'EXHIBIT_DISPOSAL_REQUESTED',
+      `Four-Eyes disposal authorization requested for ${item?.exhibit_number}. Court Order: ${courtOrderRef}`,
+      'approvals',
+      newApproval.id
+    );
+  };
+
+  // 3. Cashless Bail Handlers
+  const handleProcessPayment = (payment: CashlessPayment, updatedBail: BailRecord) => {
+    setPayments((prev) => [payment, ...prev]);
+    setBailRecords((prev) =>
+      prev.map((b) => (b.id === updatedBail.id ? updatedBail : b))
+    );
+    appendAuditLog(
+      'CASHLESS_BAIL_SETTLED',
+      `Cashless bail of KES ${payment.amount} settled via ${payment.gateway} (M-Pesa: ${payment.mpesa_receipt_number}, Txn: ${payment.transaction_reference}) for detainee ${updatedBail.detainee_name} (OB ${updatedBail.ob_number}). Credited to Paybill 522123.`,
+      'payments',
+      payment.id
+    );
+  };
+
+  const handleRequestBailWaiver = (bailId: string, reason: string) => {
+    const bail = bailRecords.find((b) => b.id === bailId);
+    const newApproval: ApprovalRequest = {
+      id: crypto.randomUUID(),
+      station_id: stationSettings.id,
+      action_type: 'BAIL_WAIVER',
+      target_resource_type: 'bail_records',
+      target_resource_id: bailId,
+      requested_by: activeOfficer.id,
+      requester_name: activeOfficer.full_name,
+      requester_service_number: activeOfficer.service_number,
+      requested_at: new Date().toISOString(),
+      justification: `Article 49 indigent bail waiver request for ${bail?.detainee_name} (OB ${bail?.ob_number}): ${reason}`,
+      status: 'PENDING',
+    };
+
+    setApprovals((prev) => [newApproval, ...prev]);
+    setBailRecords((prev) =>
+      prev.map((b) =>
+        b.id === bailId ? { ...b, status: 'WAIVER_REQUESTED', waiver_reason: reason } : b
+      )
+    );
+    appendAuditLog(
+      'BAIL_WAIVER_REQUESTED',
+      `Indigent bail waiver routed for OCS Four-Eyes authorization: ${bail?.detainee_name}. Grounds: ${reason}`,
+      'approvals',
+      newApproval.id
+    );
+  };
+
+  const handleCreateBailRecord = (newBail: BailRecord) => {
+    setBailRecords((prev) => [newBail, ...prev]);
+    appendAuditLog(
+      'BAIL_RECORD_CREATED',
+      `Police cash bail set at KES ${newBail.amount} for detainee ${newBail.detainee_name} (OB ${newBail.ob_number})`,
+      'bail_records',
+      newBail.id
+    );
+  };
+
+  // 4. Logistics & Armory Handlers
+  const handleIssueWeapon = (
+    weaponId: string,
+    officerId: string,
+    officerName: string,
+    serviceNo: string,
+    rounds: number
+  ) => {
+    setWeapons((prev) =>
+      prev.map((w) =>
+        w.id === weaponId
+          ? {
+              ...w,
+              status: 'ISSUED',
+              issued_to_officer_id: officerId,
+              issued_to_officer_name: officerName,
+              issued_to_service_no: serviceNo,
+              issued_at: new Date().toISOString(),
+              issued_rounds: rounds,
+              returned_rounds: 0,
+              armorer_service_no: activeOfficer.service_number,
+              shift_end_reconciled: false,
+              discrepancy_flagged: false,
+            }
+          : w
+      )
+    );
+    appendAuditLog(
+      'WEAPON_ISSUED_SHIFT',
+      `Firearm ${weaponId} issued to ${officerName} (${serviceNo}) with ${rounds} live rounds by Armorer ${activeOfficer.service_number}`,
+      'armory_weapons',
+      weaponId
+    );
+  };
+
+  const handleReturnWeapon = (
+    weaponId: string,
+    returnedRounds: number,
+    justification?: string
+  ) => {
+    const targetWeapon = weapons.find((w) => w.id === weaponId);
+    const deficit = targetWeapon ? targetWeapon.issued_rounds - returnedRounds : 0;
+    const hasAnomaly = deficit > 0 && !justification;
+
+    setWeapons((prev) =>
+      prev.map((w) =>
+        w.id === weaponId
+          ? {
+              ...w,
+              status: 'IN_ARMORY',
+              returned_rounds: returnedRounds,
+              returned_at: new Date().toISOString(),
+              shift_end_reconciled: true,
+              discrepancy_flagged: hasAnomaly || (deficit > 0 && !justification),
+            }
+          : w
+      )
+    );
+
+    if (deficit > 0) {
+      appendAuditLog(
+        'ARMORY_AMMUNITION_DEFICIT',
+        `AMMUNITION RECONCILIATION: ${deficit} rounds expended/missing for ${targetWeapon?.weapon_type} (S/N: ${targetWeapon?.serial_number}). Fired rounds report: ${justification || 'CRITICAL: NO REPORT FILED - ANOMALY FLAGGED'}`,
+        'armory_weapons',
+        weaponId
+      );
+    } else {
+      appendAuditLog(
+        'WEAPON_RETURNED_RECONCILED',
+        `Firearm ${targetWeapon?.serial_number} returned with 100% round reconciliation (${returnedRounds}/${targetWeapon?.issued_rounds} rounds verified)`,
+        'armory_weapons',
+        weaponId
+      );
+    }
+  };
+
+  const handleLogFuel = (newLog: FuelLog, updatedMileage: number) => {
+    setFuelLogs((prev) => [newLog, ...prev]);
+    setVehicles((prev) =>
+      prev.map((v) =>
+        v.id === newLog.vehicle_id ? { ...v, current_mileage: updatedMileage } : v
+      )
+    );
+    appendAuditLog(
+      'VEHICLE_FUELED',
+      `Fuel consumption recorded for ${newLog.vehicle_reg}: ${newLog.fuel_litres}L (KES ${newLog.cost_kes}) at Odo ${newLog.mileage_at_fueling} KM. Station: ${newLog.fuel_station} (Rec: ${newLog.receipt_number})`,
+      'fuel_logs',
+      newLog.id
+    );
+  };
+
+  const handleUpdateVehicleStatus = (vehicleId: string, status: PatrolVehicle['status']) => {
+    setVehicles((prev) =>
+      prev.map((v) => (v.id === vehicleId ? { ...v, status } : v))
+    );
+    appendAuditLog(
+      'VEHICLE_STATUS_CHANGED',
+      `Vehicle ${vehicleId} dispatch status updated to ${status} by ${activeOfficer.service_number}`,
+      'patrol_vehicles',
+      vehicleId
+    );
+  };
+
+  // Approvals Inbox Handlers (Four-Eyes dual controls)
   const handleApproveApproval = (approvalId: string, notes: string) => {
     const targetApproval = approvals.find((a) => a.id === approvalId);
 
@@ -657,6 +1033,33 @@ export function App() {
           )
         );
       }
+    }
+
+    // If approval is for EVIDENCE_DISPOSAL
+    if (targetApproval?.action_type === 'EVIDENCE_DISPOSAL') {
+      setEvidenceItems((prev) =>
+        prev.map((e) =>
+          e.id === targetApproval.target_resource_id
+            ? { ...e, status: 'DISPOSED' }
+            : e
+        )
+      );
+    }
+
+    // If approval is for BAIL_WAIVER
+    if (targetApproval?.action_type === 'BAIL_WAIVER') {
+      setBailRecords((prev) =>
+        prev.map((b) =>
+          b.id === targetApproval.target_resource_id
+            ? {
+                ...b,
+                status: 'WAIVED',
+                waiver_approved_by: activeOfficer.id,
+                waiver_approval_id: approvalId,
+              }
+            : b
+        )
+      );
     }
 
     appendAuditLog(
@@ -708,30 +1111,29 @@ export function App() {
     const target = officers.find((o) => o.id === officerId);
     appendAuditLog(
       'OFFICER_SUSPENDED',
-      `Suspension ordered for ${target?.full_name} (${target?.service_number}): ${reason}`,
+      `Officer ${target?.full_name} (${target?.service_number}) suspended by OCS. Reason: ${reason}`,
       'officers',
       officerId
     );
   };
 
-  const handleReactivateOfficer = (officerId: string, reason: string) => {
+  const handleReactivateOfficer = (officerId: string) => {
     setOfficers((prev) =>
       prev.map((o) => (o.id === officerId ? { ...o, status: 'ACTIVE', is_active: true } : o))
     );
     const target = officers.find((o) => o.id === officerId);
     appendAuditLog(
       'OFFICER_REACTIVATED',
-      `Reactivation authorized for ${target?.full_name} (${target?.service_number}): ${reason}`,
+      `Officer ${target?.full_name} (${target?.service_number}) restored to active duty`,
       'officers',
       officerId
     );
   };
 
-  const handleRevokeSession = (officerId: string, reason: string) => {
-    const target = officers.find((o) => o.id === officerId);
+  const handleRevokeSession = (officerId: string) => {
     appendAuditLog(
       'SESSION_REVOKED',
-      `Remote terminal session invalidated for ${target?.full_name} (${target?.service_number}): ${reason}`,
+      `Active JWT and TOTP session killed by OCS for officer ${officerId}`,
       'officers',
       officerId
     );
@@ -792,6 +1194,7 @@ export function App() {
 
   const pendingApprovalsCount = approvals.filter((a) => a.status === 'PENDING').length;
   const activeInCustodyCount = custodyRecords.filter((c) => c.is_in_custody).length;
+  const armoryDiscrepancies = weapons.filter((w) => w.discrepancy_flagged).length;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
@@ -924,7 +1327,7 @@ export function App() {
             {/* 1. Digital Occurrence Book (OB) */}
             <button
               onClick={() => setActiveTab('OB_ENTRIES')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
                 activeTab === 'OB_ENTRIES'
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                   : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
@@ -937,7 +1340,7 @@ export function App() {
             {/* 2. Custody & 24h Clock */}
             <button
               onClick={() => setActiveTab('CUSTODY')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors relative ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors relative ${
                 activeTab === 'CUSTODY'
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                   : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
@@ -957,7 +1360,7 @@ export function App() {
             {/* 3. Book-In Desk */}
             <button
               onClick={() => setActiveTab('BOOK_IN')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
                 activeTab === 'BOOK_IN'
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                   : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
@@ -967,10 +1370,67 @@ export function App() {
               <span>Book-In Desk</span>
             </button>
 
-            {/* 4. Officers & Staff */}
+            {/* 4. CID Case Management */}
+            <button
+              onClick={() => setActiveTab('CASES')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
+                activeTab === 'CASES'
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
+              }`}
+            >
+              <Briefcase className="h-4 w-4" />
+              <span>Case Files ({cases.length})</span>
+            </button>
+
+            {/* 5. Exhibit Store & Cryptographic QR */}
+            <button
+              onClick={() => setActiveTab('EVIDENCE')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
+                activeTab === 'EVIDENCE'
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
+              }`}
+            >
+              <Package className="h-4 w-4" />
+              <span>Exhibits & QR ({evidenceItems.length})</span>
+            </button>
+
+            {/* 6. Cashless Bail Desk */}
+            <button
+              onClick={() => setActiveTab('BAIL')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
+                activeTab === 'BAIL'
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
+              }`}
+            >
+              <CreditCard className="h-4 w-4" />
+              <span>Cashless Bail ({bailRecords.length})</span>
+            </button>
+
+            {/* 7. Armory & Patrol Fleet */}
+            <button
+              onClick={() => setActiveTab('LOGISTICS')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors relative ${
+                activeTab === 'LOGISTICS'
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
+              }`}
+            >
+              <Crosshair className="h-4 w-4" />
+              <span>Armory & Fleet</span>
+              {armoryDiscrepancies > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-red-600 text-white font-bold animate-pulse">
+                  !
+                </span>
+              )}
+            </button>
+
+            {/* 8. Officers & Staff */}
             <button
               onClick={() => setActiveTab('OFFICERS')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
                 activeTab === 'OFFICERS'
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                   : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
@@ -980,10 +1440,10 @@ export function App() {
               <span>Officers ({officers.length})</span>
             </button>
 
-            {/* 5. Four-Eyes Approvals */}
+            {/* 9. Four-Eyes Approvals */}
             <button
               onClick={() => setActiveTab('APPROVALS')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors relative ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors relative ${
                 activeTab === 'APPROVALS'
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                   : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
@@ -1000,10 +1460,10 @@ export function App() {
               )}
             </button>
 
-            {/* 6. Immutable Audit Log */}
+            {/* 10. Immutable Audit Log */}
             <button
               onClick={() => setActiveTab('AUDIT')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
                 activeTab === 'AUDIT'
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                   : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
@@ -1013,10 +1473,10 @@ export function App() {
               <span>Audit Ledger</span>
             </button>
 
-            {/* 7. RBAC Matrix */}
+            {/* 11. RBAC Matrix */}
             <button
               onClick={() => setActiveTab('ROLES')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
                 activeTab === 'ROLES'
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                   : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
@@ -1026,10 +1486,10 @@ export function App() {
               <span>RBAC</span>
             </button>
 
-            {/* 8. Station Settings */}
+            {/* 12. Station Settings */}
             <button
               onClick={() => setActiveTab('SETTINGS')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
                 activeTab === 'SETTINGS'
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                   : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
@@ -1039,10 +1499,10 @@ export function App() {
               <span>Settings</span>
             </button>
 
-            {/* 9. First-Run Setup */}
+            {/* 13. First-Run Setup */}
             <button
               onClick={() => setActiveTab('SETUP')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
                 activeTab === 'SETUP'
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                   : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
@@ -1078,7 +1538,7 @@ export function App() {
             />
           )}
 
-          {/* Module 3: Custody & 24h Clock */}
+          {/* Module 2: Custody & 24h Clock */}
           {activeTab === 'CUSTODY' && (
             <CustodyManagement
               custodyRecords={custodyRecords}
@@ -1094,7 +1554,7 @@ export function App() {
             />
           )}
 
-          {/* Module 2: Person Book-In Flow */}
+          {/* Module 3: Person Book-In Flow */}
           {activeTab === 'BOOK_IN' && (
             <PersonBookInFlow
               activeOfficer={activeOfficer}
@@ -1107,6 +1567,63 @@ export function App() {
                 setActiveTab('CUSTODY');
               }}
               onCompleteBookIn={handleCompleteBookIn}
+            />
+          )}
+
+          {/* Module 4: CID Case Management */}
+          {activeTab === 'CASES' && (
+            <CaseManagement
+              cases={cases}
+              notes={caseNotes}
+              obEntries={obEntries}
+              officers={officers}
+              activeOfficer={activeOfficer}
+              onCreateCase={handleCreateCase}
+              onAssignIO={handleAssignIO}
+              onAddNote={handleAddCaseNote}
+              onUpdateCaseStatus={handleUpdateCaseStatus}
+            />
+          )}
+
+          {/* Module 5: Evidence Store & Cryptographic QR */}
+          {activeTab === 'EVIDENCE' && (
+            <EvidenceRegistry
+              evidenceItems={evidenceItems}
+              transfers={evidenceTransfers}
+              cases={cases}
+              activeOfficers={officers}
+              currentOfficer={activeOfficer}
+              onAddEvidence={handleAddEvidence}
+              onTransferEvidence={handleTransferEvidence}
+              onRequestDisposal={handleRequestDisposal}
+            />
+          )}
+
+          {/* Module 6: Cashless Bail Desk */}
+          {activeTab === 'BAIL' && (
+            <CashlessBailCheckout
+              bailRecords={bailRecords}
+              payments={payments}
+              custodyRecords={custodyRecords}
+              currentOfficer={activeOfficer}
+              onProcessPayment={handleProcessPayment}
+              onRequestWaiver={handleRequestBailWaiver}
+              onCreateBailRecord={handleCreateBailRecord}
+            />
+          )}
+
+          {/* Module 7: Armory & Patrol Fleet */}
+          {activeTab === 'LOGISTICS' && (
+            <ArmoryAndVehicles
+              weapons={weapons}
+              vehicles={vehicles}
+              fuelLogs={fuelLogs}
+              activeOfficers={officers}
+              currentOfficer={activeOfficer}
+              onIssueWeapon={handleIssueWeapon}
+              onReturnWeapon={handleReturnWeapon}
+              onLogFuel={handleLogFuel}
+              onUpdateVehicleStatus={handleUpdateVehicleStatus}
             />
           )}
 

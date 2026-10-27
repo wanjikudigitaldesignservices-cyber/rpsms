@@ -10,6 +10,7 @@
     "test": "node scripts/verify_rls_and_security.mjs",
     "test:migrations": "node scripts/verify_migrations.mjs",
     "test:phase2": "node scripts/verify_phase2_custody_ob.mjs",
+    "test:phase3": "node scripts/verify_phase3_cases_evidence_bail.mjs",
     "verify:rls": "node scripts/verify_rls_and_security.mjs",
     "verify:audit": "node scripts/verify_audit_chain.mjs",
     "preview": "vite preview"

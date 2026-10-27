@@ -312,3 +312,204 @@ export interface VisitorLog {
   time_out?: string;
   logged_by_service_no: string;
 }
+
+/* =========================================================================
+   PHASE 3 TYPES: CASES, EVIDENCE, CASHLESS BAIL, ARMORY & PATROL FLEET
+   ========================================================================= */
+
+export type CaseStatus =
+  | 'NEW'
+  | 'ASSIGNED'
+  | 'INVESTIGATION'
+  | 'FILE_CLOSED_PENDING_APPROVAL'
+  | 'CLOSED_NO_FURTHER_ACTION'
+  | 'COURT_PROCEEDINGS'
+  | 'RESOLVED_CONVICTION'
+  | 'RESOLVED_ACQUITTAL';
+
+export type CaseAssignmentMethod = 'RANDOM_FAIR' | 'OCS_OVERRIDE';
+
+export interface CaseRecord {
+  id: string;
+  station_id: string;
+  ob_entry_id: string;
+  ob_number: string;
+  case_number: string;
+  crime_category: string;
+  penal_code_section?: string;
+  title: string;
+  description: string;
+  status: CaseStatus;
+  assigned_io_id?: string;
+  assigned_io_name?: string;
+  assigned_io_service_no?: string;
+  assigned_at?: string;
+  assignment_method: CaseAssignmentMethod;
+  ocs_override_reason?: string;
+  court_date?: string;
+  court_name?: string;
+  created_at: string;
+  evidence_count: number;
+  notes_count: number;
+}
+
+export type CaseNoteType =
+  | 'INVESTIGATION_UPDATE'
+  | 'INTERVIEW_SUMMARY'
+  | 'SCENE_REPORT'
+  | 'DIRECTIVE'
+  | 'COURT_UPDATE';
+
+export interface CaseNote {
+  id: string;
+  case_id: string;
+  author_id: string;
+  author_name: string;
+  author_service_no: string;
+  note_type: CaseNoteType;
+  content: string;
+  is_privileged: boolean;
+  created_at: string;
+}
+
+export type EvidenceCategory =
+  | 'FIREARM'
+  | 'NARCOTICS'
+  | 'DIGITAL'
+  | 'CLOTHING'
+  | 'DOCUMENT'
+  | 'BIOLOGICAL'
+  | 'CURRENCY'
+  | 'OTHER';
+
+export type EvidenceStatus =
+  | 'IN_STORE'
+  | 'IN_ANALYSIS'
+  | 'IN_COURT'
+  | 'DISPOSAL_PENDING_APPROVAL'
+  | 'DISPOSED'
+  | 'RELEASED_TO_OWNER';
+
+export interface EvidenceItem {
+  id: string;
+  station_id: string;
+  case_id: string;
+  case_number: string;
+  exhibit_number: string;
+  qr_code_identifier: string;
+  description: string;
+  category: EvidenceCategory;
+  storage_location: string;
+  current_custodian_id: string;
+  current_custodian_name: string;
+  current_custodian_service_no: string;
+  status: EvidenceStatus;
+  initial_photo_path?: string;
+  disposal_approval_id?: string;
+  court_order_ref?: string;
+  created_at: string;
+  transfers_count: number;
+}
+
+export interface EvidenceTransfer {
+  id: string;
+  evidence_id: string;
+  transferred_from_id: string;
+  transferred_from_name: string;
+  transferred_from_service_no: string;
+  transferred_to_id: string;
+  transferred_to_name: string;
+  transferred_to_service_no: string;
+  transfer_reason: string;
+  transfer_timestamp: string;
+  acknowledged: boolean;
+  acknowledged_at?: string;
+}
+
+export type BailType = 'POLICE_BAIL' | 'COURT_BAIL' | 'BOND';
+export type BailStatus = 'PENDING' | 'PAID' | 'REFUNDED' | 'FORFEITED' | 'WAIVER_REQUESTED' | 'WAIVED';
+
+export interface BailRecord {
+  id: string;
+  custody_record_id: string;
+  station_id: string;
+  detainee_name: string;
+  ob_number: string;
+  bail_type: BailType;
+  amount: number;
+  is_free_bail_notice_acknowledged: boolean;
+  status: BailStatus;
+  receipt_number?: string;
+  waiver_reason?: string;
+  waiver_approved_by?: string;
+  waiver_approval_id?: string;
+  created_at: string;
+  paid_at?: string;
+}
+
+export interface CashlessPayment {
+  id: string;
+  bail_record_id: string;
+  station_id: string;
+  amount: number;
+  payer_phone: string;
+  payer_name: string;
+  gateway: 'INTASEND' | 'MPESA_DIRECT';
+  transaction_reference: string;
+  mpesa_receipt_number: string;
+  idempotency_key: string;
+  payment_status: 'PENDING' | 'COMPLETED' | 'FAILED';
+  official_account_dest: string;
+  created_at: string;
+  completed_at?: string;
+}
+
+export type WeaponCondition = 'SERVICEABLE' | 'NEEDS_MAINTENANCE' | 'UNSERVICEABLE';
+export type WeaponStatus = 'IN_ARMORY' | 'ISSUED' | 'MAINTENANCE' | 'BALLISTICS_TESTING';
+
+export interface ArmoryWeapon {
+  id: string;
+  station_id: string;
+  weapon_type: string;
+  serial_number: string;
+  rounds_capacity: number;
+  condition: WeaponCondition;
+  status: WeaponStatus;
+  issued_to_officer_id?: string;
+  issued_to_officer_name?: string;
+  issued_to_service_no?: string;
+  issued_at?: string;
+  issued_rounds: number;
+  returned_rounds: number;
+  returned_at?: string;
+  armorer_service_no?: string;
+  shift_end_reconciled: boolean;
+  discrepancy_flagged: boolean;
+}
+
+export type VehicleStatus = 'ACTIVE' | 'PATROL' | 'MAINTENANCE' | 'OUT_OF_SERVICE';
+
+export interface PatrolVehicle {
+  id: string;
+  station_id: string;
+  registration_number: string;
+  vehicle_model: string;
+  vehicle_type: 'PATROL_PICKUP' | 'STATION_CAR' | 'PRISONER_VAN' | 'MOTORCYCLE';
+  current_mileage: number;
+  fuel_type: 'DIESEL' | 'PETROL';
+  status: VehicleStatus;
+}
+
+export interface FuelLog {
+  id: string;
+  vehicle_id: string;
+  vehicle_reg: string;
+  officer_service_no: string;
+  fuel_litres: number;
+  cost_kes: number;
+  mileage_at_fueling: number;
+  fuel_station: string;
+  receipt_number: string;
+  consumption_anomaly_flagged: boolean;
+  logged_at: string;
+}

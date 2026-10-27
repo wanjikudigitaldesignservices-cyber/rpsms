@@ -8,7 +8,9 @@ import {
   KeyRound, 
   ShieldCheck, 
   Clock, 
-  UserPlus
+  UserPlus,
+  LogOut,
+  Database
 } from 'lucide-react';
 import type { Officer, AuditLogEntry, ApprovalRequest, StationSettingsData, RoleName } from '@/types';
 import { OfficerList } from '@/components/admin/OfficerList';
@@ -19,6 +21,8 @@ import { LiveAuditLogViewer } from '@/components/admin/LiveAuditLogViewer';
 import { ApprovalsInbox } from '@/components/admin/ApprovalsInbox';
 import { FirstRunSetup } from '@/components/admin/FirstRunSetup';
 import { MfaSetupModal } from '@/components/admin/MfaSetupModal';
+import { LoginPage } from '@/components/auth/LoginPage';
+import { RlsStatusModal } from '@/components/admin/RlsStatusModal';
 
 const INITIAL_STATION: StationSettingsData = {
   id: 'a0000000-0000-0000-0000-000000000001',
@@ -229,21 +233,52 @@ export function App() {
   const activeOfficer = officers.find((o) => o.id === activeOfficerId) || officers[0];
   const activeRole: RoleName = activeOfficer.role_name;
 
-  // Modals
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
-  const [isMfaOpen, setIsMfaOpen] = useState(false);
+  // Authentication & RLS session state
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [isRlsOpen, setIsRlsOpen] = useState<boolean>(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
+  const [isMfaOpen, setIsMfaOpen] = useState<boolean>(false);
 
   // Live session timeout countdown (15 min)
   const [secondsRemaining, setSecondsRemaining] = useState(15 * 60);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     const timer = setInterval(() => {
-      setSecondsRemaining((prev) => (prev > 0 ? prev - 1 : 0));
+      setSecondsRemaining((prev) => {
+        if (prev <= 1) {
+          setIsAuthenticated(false);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [isAuthenticated]);
 
   const resetSessionTimer = () => setSecondsRemaining(15 * 60);
+
+  const handleLoginSuccess = (officer: Officer) => {
+    setActiveOfficerId(officer.id);
+    setIsAuthenticated(true);
+    resetSessionTimer();
+    appendAuditLog(
+      'OFFICER_AUTHENTICATED',
+      `Officer ${officer.full_name} (${officer.service_number}) authenticated via Hardware/App TOTP MFA.`,
+      'officers',
+      officer.id
+    );
+  };
+
+  const handleLogout = () => {
+    appendAuditLog(
+      'OFFICER_LOGGED_OUT',
+      `Officer ${activeOfficer.full_name} (${activeOfficer.service_number}) terminated terminal session.`,
+      'officers',
+      activeOfficer.id
+    );
+    setIsAuthenticated(false);
+  };
 
   // Helper to chain a new audit log record
   const appendAuditLog = (action: string, justification: string, tableName?: string, recordId?: string) => {
@@ -415,6 +450,10 @@ export function App() {
     return false;
   };
 
+  if (!isAuthenticated) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} availableOfficers={officers} />;
+  }
+
   const formatCountdown = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -492,6 +531,16 @@ export function App() {
               </select>
             </div>
 
+            {/* RLS Status Inspector Button */}
+            <button
+              onClick={() => setIsRlsOpen(true)}
+              className="flex items-center gap-1.5 rounded bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-600/50 px-2.5 py-1 text-xs font-semibold text-emerald-300 transition-colors"
+              title="Inspect PostgreSQL Row-Level Security Status across all 34 tables"
+            >
+              <Database className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">RLS Active (34/34)</span>
+            </button>
+
             {/* MFA Setup Trigger */}
             <button
               onClick={() => setIsMfaOpen(true)}
@@ -499,6 +548,15 @@ export function App() {
               title="Configure Mandatory TOTP MFA"
             >
               <ShieldCheck className="h-4 w-4 text-emerald-400" />
+            </button>
+
+            {/* Sign Out Button */}
+            <button
+              onClick={handleLogout}
+              className="rounded bg-red-950/40 hover:bg-red-900/60 border border-red-800/60 p-1.5 text-red-400 hover:text-red-200 transition-colors"
+              title="Sign Out of Police Terminal Session"
+            >
+              <LogOut className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -674,6 +732,14 @@ export function App() {
           );
         }}
         serviceNumber={activeOfficer.service_number}
+      />
+
+      {/* RLS Inspector Modal */}
+      <RlsStatusModal
+        isOpen={isRlsOpen}
+        onClose={() => setIsRlsOpen(false)}
+        activeRole={activeRole}
+        activeServiceNumber={activeOfficer.service_number}
       />
     </div>
   );

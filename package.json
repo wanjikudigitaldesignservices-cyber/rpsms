@@ -1,0 +1,41 @@
+{
+  "name": "rpsms",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "test": "node scripts/verify_rls_and_security.mjs",
+    "test:migrations": "node scripts/verify_migrations.mjs",
+    "verify:rls": "node scripts/verify_rls_and_security.mjs",
+    "verify:audit": "node scripts/verify_audit_chain.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.62.0",
+    "otpauth": "^9.5.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^3.7.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.12",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.19.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^6.1.2",
+    "autoprefixer": "^10.6.2",
+    "oxlint": "^1.89.0",
+    "postcss": "^8.5.32",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}

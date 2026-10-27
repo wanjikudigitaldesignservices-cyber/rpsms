@@ -97,3 +97,218 @@ export interface StationSettingsData {
   require_mandatory_mfa: boolean;
   session_timeout_minutes: number;
 }
+
+/* =========================================================================
+   PHASE 2 TYPES: OB, CUSTODY, PERSONS, MUGSHOTS, CELLS, PROPERTY, WELFARE
+   ========================================================================= */
+
+export type OBCategory =
+  | 'CRIMINAL'
+  | 'TRAFFIC'
+  | 'INCIDENT'
+  | 'REPORT'
+  | 'DIRECTIVE'
+  | 'PUBLIC_COMPLAINT'
+  | 'LOST_PROPERTY'
+  | 'OTHER';
+
+export type OBStatus =
+  | 'OPEN'
+  | 'ASSIGNED'
+  | 'AMENDED'
+  | 'UNDER_INVESTIGATION'
+  | 'CLOSED'
+  | 'COURT_PENDING';
+
+export interface OBAmendment {
+  id: string;
+  ob_entry_id: string;
+  station_id: string;
+  amendment_ob_number: string;
+  reason: string;
+  amendment_narrative: string;
+  proposed_by: string;
+  proposer_name: string;
+  proposer_service_no: string;
+  approved_by?: string;
+  approver_name?: string;
+  approval_status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approval_notes?: string;
+  previous_hash: string;
+  entry_hash: string;
+  created_at: string;
+  approved_at?: string;
+}
+
+export interface OBEntry {
+  id: string;
+  station_id: string;
+  ob_number: string;
+  seq_number: number;
+  incident_date: string;
+  entry_timestamp: string;
+  category: OBCategory;
+  subject: string;
+  narrative: string;
+  recorded_by: string;
+  recorded_by_name: string;
+  recorded_by_service_no: string;
+  reporting_person_name?: string;
+  reporting_person_phone?: string;
+  reporting_person_phone_hash?: string;
+  previous_entry_hash: string;
+  entry_hash: string;
+  status: OBStatus;
+  is_amended: boolean;
+  amendments?: OBAmendment[];
+  created_at: string;
+}
+
+export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
+export type RiskLevel = 'LOW' | 'NORMAL' | 'HIGH' | 'ESCAPE_RISK' | 'MEDICAL_ATTENTION';
+export type IdentifierType = 'NATIONAL_ID' | 'PASSPORT' | 'PHONE_NUMBER' | 'ALIEN_ID' | 'MILITARY_ID';
+
+export interface PersonIdentifier {
+  id: string;
+  person_id: string;
+  identifier_type: IdentifierType;
+  id_value_masked: string;
+  id_value_hash: string; // blind index SHA-256
+  is_primary: boolean;
+  created_at: string;
+}
+
+export interface Mugshot {
+  id: string;
+  person_id: string;
+  station_id: string;
+  view_angle: 'FRONT' | 'LEFT' | 'RIGHT' | 'DISTINGUISHING_MARK';
+  image_data_url: string;
+  sha256_hash: string;
+  exif_stripped: boolean;
+  taken_at: string;
+  taken_by_service_no: string;
+}
+
+export interface NextOfKin {
+  id: string;
+  person_id: string;
+  name: string;
+  relationship: string;
+  phone: string;
+  physical_address?: string;
+}
+
+export interface Person {
+  id: string;
+  station_id: string;
+  full_name: string;
+  alias?: string;
+  gender: Gender;
+  date_of_birth?: string;
+  nationality: string;
+  physical_address?: string;
+  distinguishing_marks?: string;
+  risk_level: RiskLevel;
+  identifiers: PersonIdentifier[];
+  mugshots: Mugshot[];
+  next_of_kin?: NextOfKin[];
+  created_at: string;
+  prior_arrests_count?: number;
+  prior_charges?: string[];
+}
+
+export type CellType = 'MALE' | 'FEMALE' | 'JUVENILE_MALE' | 'JUVENILE_FEMALE' | 'ISOLATION' | 'HOLDING';
+
+export interface Cell {
+  id: string;
+  station_id: string;
+  cell_number: string;
+  cell_name: string;
+  cell_type: CellType;
+  capacity: number;
+  current_occupants: number;
+  status: 'ACTIVE' | 'MAINTENANCE' | 'DECOMMISSIONED';
+}
+
+export type ExitReason =
+  | 'RELEASED_WITHOUT_CHARGE'
+  | 'POLICE_BAIL'
+  | 'COURT_BAIL'
+  | 'CHARGED_TO_COURT'
+  | 'TRANSFERRED'
+  | 'HOSPITAL'
+  | 'DECEASED';
+
+export interface CustodyRecord {
+  id: string;
+  station_id: string;
+  person_id: string;
+  person: Person;
+  ob_entry_id: string;
+  ob_number: string;
+  cell_id: string;
+  cell_number: string;
+  book_in_time: string;
+  arrest_reason: string;
+  arresting_officer_name: string;
+  arresting_officer_service_no: string;
+  booked_in_by: string;
+  booked_in_by_service_no: string;
+  rights_read: boolean;
+  lawyer_notified: boolean;
+  next_of_kin_notified: boolean;
+  health_status_at_entry: string;
+  is_in_custody: boolean;
+  custody_limit_hours: number;
+  countdown_start: string;
+  alert_12h_sent: boolean;
+  alert_20h_sent: boolean;
+  breach_flagged: boolean;
+  exit_time?: string;
+  exit_reason?: ExitReason;
+  exit_notes?: string;
+  exit_authorized_by?: string;
+  exit_authorized_by_service_no?: string;
+  exit_approval_id?: string;
+  property_items_count: number;
+  welfare_logs_count: number;
+}
+
+export interface PropertyItem {
+  id: string;
+  custody_record_id: string;
+  item_description: string;
+  category: 'VALUABLES' | 'CASH' | 'PHONE' | 'BELT_SHOELACES' | 'MEDICATION' | 'CLOTHING' | 'OTHER';
+  quantity: number;
+  condition_at_booking: string;
+  photo_path?: string;
+  booked_by_service_no: string;
+  status: 'HELD' | 'RETURNED' | 'FORFEITED' | 'TRANSFERRED_TO_COURT' | 'UNRETURNED_FLAGGED';
+  return_time?: string;
+  returned_by_service_no?: string;
+  prisoner_signature_captured: boolean;
+  unreturned_reason?: string;
+  created_at: string;
+}
+
+export interface WelfareLog {
+  id: string;
+  custody_record_id: string;
+  log_type: 'MEAL' | 'MEDICAL_CHECK' | 'MEDICATION_ADMINISTERED' | 'LAWYER_VISIT' | 'PHYSICAL_INSPECTION' | 'COURT_PREPARATION';
+  details: string;
+  conducted_by_service_no: string;
+  external_party_name?: string;
+  logged_at: string;
+}
+
+export interface VisitorLog {
+  id: string;
+  custody_record_id: string;
+  visitor_name: string;
+  relationship: string;
+  purpose: string;
+  time_in: string;
+  time_out?: string;
+  logged_by_service_no: string;
+}

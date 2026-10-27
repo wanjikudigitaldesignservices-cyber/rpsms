@@ -8,11 +8,26 @@ import {
   KeyRound, 
   ShieldCheck, 
   Clock, 
-  UserPlus,
-  LogOut,
-  Database
+  UserPlus, 
+  LogOut, 
+  Database, 
+  BookOpen, 
+  Search 
 } from 'lucide-react';
-import type { Officer, AuditLogEntry, ApprovalRequest, StationSettingsData, RoleName } from '@/types';
+import type { 
+  Officer, 
+  AuditLogEntry, 
+  ApprovalRequest, 
+  StationSettingsData, 
+  RoleName,
+  OBEntry,
+  Person,
+  Cell,
+  CustodyRecord,
+  PropertyItem,
+  WelfareLog,
+  ExitReason
+} from '@/types';
 import { OfficerList } from '@/components/admin/OfficerList';
 import { OfficerOnboardingModal } from '@/components/admin/OfficerOnboardingModal';
 import { RolesPermissionsView } from '@/components/admin/RolesPermissionsView';
@@ -23,6 +38,22 @@ import { FirstRunSetup } from '@/components/admin/FirstRunSetup';
 import { MfaSetupModal } from '@/components/admin/MfaSetupModal';
 import { LoginPage } from '@/components/auth/LoginPage';
 import { RlsStatusModal } from '@/components/admin/RlsStatusModal';
+
+// Phase 2 Components
+import { DigitalOccurrenceBook } from '@/components/ob/DigitalOccurrenceBook';
+import { PersonBookInFlow } from '@/components/custody/PersonBookInFlow';
+import { CustodyManagement } from '@/components/custody/CustodyManagement';
+import { GlobalForensicSearch } from '@/components/search/GlobalForensicSearch';
+
+// Seed Data
+import { 
+  INITIAL_CELLS, 
+  INITIAL_OB_ENTRIES, 
+  INITIAL_PERSONS, 
+  INITIAL_CUSTODY_RECORDS, 
+  INITIAL_PROPERTY_ITEMS, 
+  INITIAL_WELFARE_LOGS 
+} from '@/lib/initialData';
 
 const INITIAL_STATION: StationSettingsData = {
   id: 'a0000000-0000-0000-0000-000000000001',
@@ -221,13 +252,31 @@ const INITIAL_APPROVALS: ApprovalRequest[] = [
 ];
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'OFFICERS' | 'APPROVALS' | 'AUDIT' | 'ROLES' | 'SETTINGS' | 'SETUP'>('OFFICERS');
+  const [activeTab, setActiveTab] = useState<
+    'OB_ENTRIES' | 'CUSTODY' | 'BOOK_IN' | 'OFFICERS' | 'APPROVALS' | 'AUDIT' | 'ROLES' | 'SETTINGS' | 'SETUP'
+  >('OB_ENTRIES');
+
+  // Core Data State
   const [officers, setOfficers] = useState<Officer[]>(INITIAL_OFFICERS);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(INITIAL_LOGS);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>(INITIAL_APPROVALS);
   const [stationSettings, setStationSettings] = useState<StationSettingsData>(INITIAL_STATION);
-  const [isSetupComplete, setIsSetupComplete] = useState(true); // Default true since seeded
-  
+  const [isSetupComplete, setIsSetupComplete] = useState(true);
+
+  // Phase 2 Data State
+  const [obEntries, setObEntries] = useState<OBEntry[]>(INITIAL_OB_ENTRIES);
+  const [persons, setPersons] = useState<Person[]>(INITIAL_PERSONS);
+  const [cells, setCells] = useState<Cell[]>(INITIAL_CELLS);
+  const [custodyRecords, setCustodyRecords] = useState<CustodyRecord[]>(INITIAL_CUSTODY_RECORDS);
+  const [propertyItems, setPropertyItems] = useState<PropertyItem[]>(INITIAL_PROPERTY_ITEMS);
+  const [welfareLogs, setWelfareLogs] = useState<WelfareLog[]>(INITIAL_WELFARE_LOGS);
+
+  // Preselected OB Entry for direct Book-In navigation
+  const [preselectedOBForBookIn, setPreselectedOBForBookIn] = useState<OBEntry | null>(null);
+
+  // Global Forensic Search state
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
   // Active session state (Default OCS)
   const [activeOfficerId, setActiveOfficerId] = useState<string>('00000000-0000-0000-0000-000000000001');
   const activeOfficer = officers.find((o) => o.id === activeOfficerId) || officers[0];
@@ -255,6 +304,18 @@ export function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, [isAuthenticated]);
+
+  // Global Keyboard Shortcut: Ctrl+K or Cmd+K to open Forensic Search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const resetSessionTimer = () => setSecondsRemaining(15 * 60);
 
@@ -285,15 +346,14 @@ export function App() {
     const lastLog = auditLogs[auditLogs.length - 1];
     const newSeq = auditLogs.length + 1;
     const prevHash = lastLog ? lastLog.log_hash : '0000000000000000000000000000000000000000000000000000000000000000';
-    
-    // Quick client-side mock hash for display
+
     const raw = `${newSeq}:${action}:${activeOfficer.service_number}:${prevHash}:${justification}`;
     let hash = 0;
     for (let i = 0; i < raw.length; i++) {
       hash = ((hash << 5) - hash) + raw.charCodeAt(i);
       hash |= 0;
     }
-    const hex = Math.abs(hash).toString(16).padStart(16, '0') + 'a7f920bc4d81e35a9012';
+    const hex = Math.abs(hash).toString(16).padStart(16, '0') + 'b8f920bc4d81e35a9012';
 
     const newLog: AuditLogEntry = {
       id: crypto.randomUUID(),
@@ -315,7 +375,322 @@ export function App() {
     setAuditLogs((prev) => [...prev, newLog]);
   };
 
-  // Actions
+  /* =========================================================================
+     PHASE 2 HANDLERS: OB, CUSTODY, BOOK-IN, PROPERTY, WELFARE, SEARCH
+     ========================================================================= */
+
+  // 1. Add OB Entry
+  const handleAddOBEntry = (newEntry: OBEntry) => {
+    setObEntries((prev) => [...prev, newEntry]);
+    appendAuditLog(
+      'OB_ENTRY_CREATED',
+      `Occurrence Book entry sealed: OB No. ${newEntry.ob_number} (${newEntry.category}) - ${newEntry.subject}`,
+      'ob_entries',
+      newEntry.id
+    );
+  };
+
+  // 2. Submit Linked OB Amendment (Creates Four-Eyes Approval)
+  const handleSubmitOBAmendment = ({
+    obEntryId,
+    amendmentObNumber,
+    reason,
+    amendmentNarrative,
+  }: {
+    obEntryId: string;
+    amendmentObNumber: string;
+    reason: string;
+    amendmentNarrative: string;
+    entryHash: string;
+  }) => {
+    const originalOB = obEntries.find((o) => o.id === obEntryId);
+
+    // Create Four-Eyes Approval Request
+    const newApproval: ApprovalRequest = {
+      id: crypto.randomUUID(),
+      station_id: stationSettings.id,
+      action_type: 'OB_AMENDMENT',
+      target_resource_type: 'ob_entries',
+      target_resource_id: obEntryId,
+      requested_by: activeOfficer.id,
+      requester_name: activeOfficer.full_name,
+      requester_service_number: activeOfficer.service_number,
+      requested_at: new Date().toISOString(),
+      justification: `Formal OB Amendment (${amendmentObNumber}) for ${originalOB?.ob_number}: Reason: ${reason} | Narrative: ${amendmentNarrative}`,
+      status: 'PENDING',
+    };
+
+    setApprovals((prev) => [newApproval, ...prev]);
+
+    // Mark original OB as under amendment review
+    setObEntries((prev) =>
+      prev.map((o) => (o.id === obEntryId ? { ...o, is_amended: true, status: 'AMENDED' } : o))
+    );
+
+    appendAuditLog(
+      'OB_AMENDMENT_PROPOSED',
+      `Four-Eyes amendment authorization requested for ${originalOB?.ob_number} by ${activeOfficer.service_number}`,
+      'ob_amendments',
+      newApproval.id
+    );
+  };
+
+  // 3. Navigate from OB entry to Book-In Flow
+  const handleNavigateToBookInFromOB = (obEntry: OBEntry) => {
+    setPreselectedOBForBookIn(obEntry);
+    setActiveTab('BOOK_IN');
+  };
+
+  // 4. Complete Person Book-In Flow
+  const handleCompleteBookIn = ({
+    person,
+    custodyRecord,
+    propertyItems: newProps,
+  }: {
+    person: Person;
+    custodyRecord: CustodyRecord;
+    propertyItems: PropertyItem[];
+  }) => {
+    setPersons((prev) => [person, ...prev]);
+    setCustodyRecords((prev) => [custodyRecord, ...prev]);
+    setPropertyItems((prev) => [...newProps, ...prev]);
+
+    // Increment cell occupants
+    setCells((prev) =>
+      prev.map((c) => (c.id === custodyRecord.cell_id ? { ...c, current_occupants: c.current_occupants + 1 } : c))
+    );
+
+    appendAuditLog(
+      'PERSON_BOOKED_IN',
+      `Detainee ${person.full_name} booked into Cell ${custodyRecord.cell_number}. Article 49 24-hour countdown engaged.`,
+      'custody_records',
+      custodyRecord.id
+    );
+
+    setPreselectedOBForBookIn(null);
+    setActiveTab('CUSTODY');
+  };
+
+  // 5. Complete Custody Exit / Discharge
+  const handleCompleteCustodyExit = ({
+    custodyRecordId,
+    exitReason,
+    notes,
+    requiresFourEyes,
+  }: {
+    custodyRecordId: string;
+    exitReason: ExitReason;
+    notes: string;
+    requiresFourEyes: boolean;
+  }) => {
+    const targetCustody = custodyRecords.find((c) => c.id === custodyRecordId);
+    if (!targetCustody) return;
+
+    if (requiresFourEyes) {
+      // Create Four-Eyes Approval Request
+      const newApproval: ApprovalRequest = {
+        id: crypto.randomUUID(),
+        station_id: stationSettings.id,
+        action_type: 'RELEASE_WITHOUT_CHARGE',
+        target_resource_type: 'custody_records',
+        target_resource_id: custodyRecordId,
+        requested_by: activeOfficer.id,
+        requester_name: activeOfficer.full_name,
+        requester_service_number: activeOfficer.service_number,
+        requested_at: new Date().toISOString(),
+        justification: `Release without charge for ${targetCustody.person.full_name} (${targetCustody.ob_number}): ${notes}`,
+        status: 'PENDING',
+      };
+
+      setApprovals((prev) => [newApproval, ...prev]);
+
+      appendAuditLog(
+        'RELEASE_WITHOUT_CHARGE_REQUESTED',
+        `Four-Eyes authorization requested by ${activeOfficer.service_number} to discharge detainee without charge: ${notes}`,
+        'approvals',
+        newApproval.id
+      );
+      return;
+    }
+
+    // Direct release (Bail, Charged to Court, Hospital, Transfer)
+    setCustodyRecords((prev) =>
+      prev.map((c) =>
+        c.id === custodyRecordId
+          ? {
+              ...c,
+              is_in_custody: false,
+              exit_time: new Date().toISOString(),
+              exit_reason: exitReason,
+              exit_notes: notes,
+              exit_authorized_by: activeOfficer.id,
+              exit_authorized_by_service_no: activeOfficer.service_number,
+            }
+          : c
+      )
+    );
+
+    // Decrement cell occupants
+    setCells((prev) =>
+      prev.map((cell) =>
+        cell.cell_number === targetCustody.cell_number
+          ? { ...cell, current_occupants: Math.max(0, cell.current_occupants - 1) }
+          : cell
+      )
+    );
+
+    appendAuditLog(
+      'CUSTODY_DISCHARGED',
+      `Detainee ${targetCustody.person.full_name} discharged from Cell ${targetCustody.cell_number} under grounds: ${exitReason}. Notes: ${notes}`,
+      'custody_records',
+      custodyRecordId
+    );
+  };
+
+  // 6. Property Register Handlers
+  const handleAddPropertyItem = (newItem: PropertyItem) => {
+    setPropertyItems((prev) => [newItem, ...prev]);
+    // Increment count on custody record
+    setCustodyRecords((prev) =>
+      prev.map((c) =>
+        c.id === newItem.custody_record_id ? { ...c, property_items_count: c.property_items_count + 1 } : c
+      )
+    );
+    appendAuditLog(
+      'PROPERTY_ITEM_INTAKE',
+      `Property intake: ${newItem.item_description} (${newItem.category}) logged by ${activeOfficer.service_number}`,
+      'property_items',
+      newItem.id
+    );
+  };
+
+  const handleReturnPropertyItem = (itemId: string, unreturnedReason?: string) => {
+    setPropertyItems((prev) =>
+      prev.map((p) =>
+        p.id === itemId
+          ? {
+              ...p,
+              status: unreturnedReason ? 'UNRETURNED_FLAGGED' : 'RETURNED',
+              return_time: new Date().toISOString(),
+              returned_by_service_no: activeOfficer.service_number,
+              unreturned_reason: unreturnedReason,
+            }
+          : p
+      )
+    );
+    appendAuditLog(
+      'PROPERTY_ITEM_RETURNED',
+      `Property return logged for item ID ${itemId} by ${activeOfficer.service_number}. Reason/Notes: ${unreturnedReason || 'Returned in full'}`,
+      'property_items',
+      itemId
+    );
+  };
+
+  // 7. Welfare Log Handlers
+  const handleAddWelfareLog = (newLog: WelfareLog) => {
+    setWelfareLogs((prev) => [newLog, ...prev]);
+    setCustodyRecords((prev) =>
+      prev.map((c) =>
+        c.id === newLog.custody_record_id ? { ...c, welfare_logs_count: c.welfare_logs_count + 1 } : c
+      )
+    );
+    appendAuditLog(
+      'WELFARE_EVENT_LOGGED',
+      `Welfare logged: ${newLog.log_type} for custody ${newLog.custody_record_id} by ${activeOfficer.service_number}`,
+      'welfare_logs',
+      newLog.id
+    );
+  };
+
+  // 8. Global Forensic Search Query Audit Logging
+  const handleLogAuditSearch = (searchQuery: string, resultCount: number) => {
+    appendAuditLog(
+      'FORENSIC_SEARCH_QUERY',
+      `KDPA Section 41 Audited Query: Officer executed forensic search for term: "${searchQuery}". Returned ${resultCount} matching records.`,
+      'audit_log'
+    );
+  };
+
+  // Approvals Inbox Handlers
+  const handleApproveApproval = (approvalId: string, notes: string) => {
+    const targetApproval = approvals.find((a) => a.id === approvalId);
+
+    setApprovals((prev) =>
+      prev.map((a) =>
+        a.id === approvalId
+          ? {
+              ...a,
+              status: 'APPROVED',
+              approved_by: activeOfficer.id,
+              approver_name: activeOfficer.full_name,
+              approved_at: new Date().toISOString(),
+            }
+          : a
+      )
+    );
+
+    // If approval is for RELEASE_WITHOUT_CHARGE, finalize detainee release
+    if (targetApproval?.action_type === 'RELEASE_WITHOUT_CHARGE') {
+      setCustodyRecords((prev) =>
+        prev.map((c) =>
+          c.id === targetApproval.target_resource_id
+            ? {
+                ...c,
+                is_in_custody: false,
+                exit_time: new Date().toISOString(),
+                exit_reason: 'RELEASED_WITHOUT_CHARGE',
+                exit_notes: `Four-Eyes release approved by ${activeOfficer.full_name}: ${notes}`,
+                exit_authorized_by: activeOfficer.id,
+                exit_authorized_by_service_no: activeOfficer.service_number,
+              }
+            : c
+        )
+      );
+
+      const dischargedCustody = custodyRecords.find((c) => c.id === targetApproval.target_resource_id);
+      if (dischargedCustody) {
+        setCells((prev) =>
+          prev.map((cell) =>
+            cell.cell_number === dischargedCustody.cell_number
+              ? { ...cell, current_occupants: Math.max(0, cell.current_occupants - 1) }
+              : cell
+          )
+        );
+      }
+    }
+
+    appendAuditLog(
+      'FOUR_EYES_APPROVED',
+      `Four-eyes authorization granted by ${activeOfficer.service_number} for request ${approvalId}. Notes: ${notes || 'Verified compliant'}`,
+      'approvals',
+      approvalId
+    );
+  };
+
+  const handleRejectApproval = (approvalId: string, reason: string) => {
+    setApprovals((prev) =>
+      prev.map((a) =>
+        a.id === approvalId
+          ? {
+              ...a,
+              status: 'REJECTED',
+              approved_by: activeOfficer.id,
+              approver_name: activeOfficer.full_name,
+              approved_at: new Date().toISOString(),
+              rejection_reason: reason,
+            }
+          : a
+      )
+    );
+    appendAuditLog(
+      'APPROVAL_REJECTED',
+      `Four-eyes authorization declined by ${activeOfficer.service_number}: ${reason}`,
+      'approvals',
+      approvalId
+    );
+  };
+
+  // Staff handlers
   const handleOnboardOfficer = (newOfficer: Officer) => {
     setOfficers((prev) => [newOfficer, ...prev]);
     appendAuditLog(
@@ -387,51 +762,6 @@ export function App() {
     setActiveTab('APPROVALS');
   };
 
-  const handleApproveApproval = (approvalId: string, notes: string) => {
-    setApprovals((prev) =>
-      prev.map((a) =>
-        a.id === approvalId
-          ? {
-              ...a,
-              status: 'APPROVED',
-              approved_by: activeOfficer.id,
-              approver_name: activeOfficer.full_name,
-              approved_at: new Date().toISOString(),
-            }
-          : a
-      )
-    );
-    appendAuditLog(
-      'ROLE_CHANGED',
-      `Four-eyes approval granted by ${activeOfficer.service_number}. Notes: ${notes || 'Verified compliant'}`,
-      'approvals',
-      approvalId
-    );
-  };
-
-  const handleRejectApproval = (approvalId: string, reason: string) => {
-    setApprovals((prev) =>
-      prev.map((a) =>
-        a.id === approvalId
-          ? {
-              ...a,
-              status: 'REJECTED',
-              approved_by: activeOfficer.id,
-              approver_name: activeOfficer.full_name,
-              approved_at: new Date().toISOString(),
-              rejection_reason: reason,
-            }
-          : a
-      )
-    );
-    appendAuditLog(
-      'APPROVAL_REJECTED',
-      `Four-eyes authorization declined by ${activeOfficer.service_number}: ${reason}`,
-      'approvals',
-      approvalId
-    );
-  };
-
   const handleSaveSettings = (updated: StationSettingsData, justification: string) => {
     setStationSettings(updated);
     appendAuditLog('STATION_CONFIG_UPDATED', justification, 'stations', updated.id);
@@ -461,16 +791,24 @@ export function App() {
   };
 
   const pendingApprovalsCount = approvals.filter((a) => a.status === 'PENDING').length;
+  const activeInCustodyCount = custodyRecords.filter((c) => c.is_in_custody).length;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
       {/* Top Institutional Header */}
       <header className="border-b border-slate-800 bg-slate-900/95 sticky top-0 z-40 backdrop-blur-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
-          {/* Station Identity */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-4">
+          {/* Station Identity & Crest */}
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-amber-500/10 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold">
-              <Shield className="h-6 w-6 text-amber-500" />
+            <div className="relative">
+              <img
+                src="/crest.jpg"
+                alt="Rockport Police Crest"
+                className="h-10 w-10 rounded-full border border-amber-500/80 object-cover shadow-md"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -480,7 +818,7 @@ export function App() {
                 <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 text-[10px] font-mono font-bold rounded">
                   RPS-001
                 </span>
-                <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-600/40 px-1.5 py-0.2 text-[10px] font-mono rounded">
+                <span className="hidden sm:inline bg-emerald-950/80 text-emerald-400 border border-emerald-600/40 px-1.5 py-0.2 text-[10px] font-mono rounded">
                   KENYA POLICE SERVICE
                 </span>
               </div>
@@ -492,19 +830,35 @@ export function App() {
 
           {/* Right Session Controls & Role Switcher */}
           <div className="flex items-center gap-3">
+            {/* Quick Forensic Search Trigger */}
+            <button
+              onClick={() => setIsSearchOpen(true)}
+              className="flex items-center gap-2 rounded-lg bg-slate-950 hover:bg-slate-900 border border-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:text-white transition-colors"
+              title="Forensic Universal Search across all registers (Ctrl+K)"
+            >
+              <Search className="h-3.5 w-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Search Registers...</span>
+              <span className="font-mono text-[10px] text-slate-500 bg-slate-900 border border-slate-700 px-1 rounded">
+                Ctrl+K
+              </span>
+            </button>
+
             {/* Live Session Timer */}
             <div 
               onClick={resetSessionTimer} 
               title="Click to reset 15-minute activity timer"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 cursor-pointer hover:border-slate-700"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 cursor-pointer hover:border-slate-700"
             >
               <Clock className="h-3.5 w-3.5 text-amber-400" />
-              <span>Session: <strong className={secondsRemaining < 180 ? 'text-red-400' : 'text-emerald-400'}>{formatCountdown(secondsRemaining)}</strong></span>
+              <span className="hidden sm:inline">Session: </span>
+              <strong className={secondsRemaining < 180 ? 'text-red-400' : 'text-emerald-400'}>
+                {formatCountdown(secondsRemaining)}
+              </strong>
             </div>
 
             {/* Active Officer Identity Badge */}
             <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
-              <div className="text-right">
+              <div className="text-right hidden sm:block">
                 <div className="text-xs font-semibold text-slate-200">{activeOfficer.full_name}</div>
                 <div className="text-[10px] font-mono text-amber-400 flex items-center justify-end gap-1">
                   <span>{activeOfficer.service_number}</span>
@@ -538,7 +892,7 @@ export function App() {
               title="Inspect PostgreSQL Row-Level Security Status across all 34 tables"
             >
               <Database className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">RLS Active (34/34)</span>
+              <span className="hidden md:inline">RLS Active (34/34)</span>
             </button>
 
             {/* MFA Setup Trigger */}
@@ -563,10 +917,57 @@ export function App() {
       </header>
 
       {/* Main Container */}
-      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-6">
         {/* Navigation Tabs Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-3">
-          <nav className="flex items-center space-x-1 sm:space-x-2 text-xs font-semibold">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <nav className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+            {/* 1. Digital Occurrence Book (OB) */}
+            <button
+              onClick={() => setActiveTab('OB_ENTRIES')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
+                activeTab === 'OB_ENTRIES'
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
+              }`}
+            >
+              <BookOpen className="h-4 w-4" />
+              <span>Occurrence Book ({obEntries.length})</span>
+            </button>
+
+            {/* 2. Custody & 24h Clock */}
+            <button
+              onClick={() => setActiveTab('CUSTODY')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors relative ${
+                activeTab === 'CUSTODY'
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
+              }`}
+            >
+              <Clock className="h-4 w-4" />
+              <span>Custody & 24h Clock</span>
+              {activeInCustodyCount > 0 && (
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  activeTab === 'CUSTODY' ? 'bg-slate-950 text-amber-400 font-bold' : 'bg-red-500 text-white font-bold'
+                }`}>
+                  {activeInCustodyCount}
+                </span>
+              )}
+            </button>
+
+            {/* 3. Book-In Desk */}
+            <button
+              onClick={() => setActiveTab('BOOK_IN')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
+                activeTab === 'BOOK_IN'
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
+              }`}
+            >
+              <UserPlus className="h-4 w-4" />
+              <span>Book-In Desk</span>
+            </button>
+
+            {/* 4. Officers & Staff */}
             <button
               onClick={() => setActiveTab('OFFICERS')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
@@ -576,9 +977,10 @@ export function App() {
               }`}
             >
               <Users className="h-4 w-4" />
-              <span>Officers & Staff ({officers.length})</span>
+              <span>Officers ({officers.length})</span>
             </button>
 
+            {/* 5. Four-Eyes Approvals */}
             <button
               onClick={() => setActiveTab('APPROVALS')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors relative ${
@@ -588,7 +990,7 @@ export function App() {
               }`}
             >
               <CheckSquare className="h-4 w-4" />
-              <span>Four-Eyes Approvals</span>
+              <span>Four-Eyes Inbox</span>
               {pendingApprovalsCount > 0 && (
                 <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                   activeTab === 'APPROVALS' ? 'bg-slate-950 text-amber-400 font-bold' : 'bg-amber-500 text-slate-950 font-bold'
@@ -598,6 +1000,7 @@ export function App() {
               )}
             </button>
 
+            {/* 6. Immutable Audit Log */}
             <button
               onClick={() => setActiveTab('AUDIT')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
@@ -607,9 +1010,10 @@ export function App() {
               }`}
             >
               <FileText className="h-4 w-4" />
-              <span>Immutable Audit Log</span>
+              <span>Audit Ledger</span>
             </button>
 
+            {/* 7. RBAC Matrix */}
             <button
               onClick={() => setActiveTab('ROLES')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
@@ -619,9 +1023,10 @@ export function App() {
               }`}
             >
               <Shield className="h-4 w-4" />
-              <span>RBAC Matrix</span>
+              <span>RBAC</span>
             </button>
 
+            {/* 8. Station Settings */}
             <button
               onClick={() => setActiveTab('SETTINGS')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
@@ -631,9 +1036,10 @@ export function App() {
               }`}
             >
               <Settings className="h-4 w-4" />
-              <span>Station Settings</span>
+              <span>Settings</span>
             </button>
 
+            {/* 9. First-Run Setup */}
             <button
               onClick={() => setActiveTab('SETUP')}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-md transition-colors ${
@@ -643,24 +1049,68 @@ export function App() {
               }`}
             >
               <KeyRound className="h-4 w-4" />
-              <span>First-Run Bootstrap</span>
+              <span>Bootstrap</span>
             </button>
           </nav>
 
-          {/* Quick Header Actions */}
+          {/* Contextual Action Button */}
           {activeTab === 'OFFICERS' && activeRole === 'OCS' && (
             <button
               onClick={() => setIsOnboardingOpen(true)}
               className="flex items-center gap-2 rounded bg-amber-500 hover:bg-amber-600 px-3.5 py-2 text-xs font-bold text-slate-950 transition-colors shadow-xs"
             >
               <UserPlus className="h-4 w-4" />
-              <span>Onboard Officer (Invite)</span>
+              <span>Onboard Officer</span>
             </button>
           )}
         </div>
 
         {/* View Switcher based on Active Tab */}
         <main>
+          {/* Module 1: Digital Occurrence Book */}
+          {activeTab === 'OB_ENTRIES' && (
+            <DigitalOccurrenceBook
+              entries={obEntries}
+              activeOfficer={activeOfficer}
+              onAddEntry={handleAddOBEntry}
+              onSubmitAmendment={handleSubmitOBAmendment}
+              onNavigateToBookIn={handleNavigateToBookInFromOB}
+            />
+          )}
+
+          {/* Module 3: Custody & 24h Clock */}
+          {activeTab === 'CUSTODY' && (
+            <CustodyManagement
+              custodyRecords={custodyRecords}
+              cells={cells}
+              propertyItems={propertyItems}
+              welfareLogs={welfareLogs}
+              activeOfficer={activeOfficer}
+              onNavigateToBookIn={() => setActiveTab('BOOK_IN')}
+              onCompleteExit={handleCompleteCustodyExit}
+              onAddPropertyItem={handleAddPropertyItem}
+              onReturnPropertyItem={handleReturnPropertyItem}
+              onAddWelfareLog={handleAddWelfareLog}
+            />
+          )}
+
+          {/* Module 2: Person Book-In Flow */}
+          {activeTab === 'BOOK_IN' && (
+            <PersonBookInFlow
+              activeOfficer={activeOfficer}
+              cells={cells}
+              obEntries={obEntries}
+              existingPersons={persons}
+              preselectedOBEntry={preselectedOBForBookIn}
+              onCancel={() => {
+                setPreselectedOBForBookIn(null);
+                setActiveTab('CUSTODY');
+              }}
+              onCompleteBookIn={handleCompleteBookIn}
+            />
+          )}
+
+          {/* Staff Directory */}
           {activeTab === 'OFFICERS' && (
             <OfficerList
               officers={officers}
@@ -672,6 +1122,7 @@ export function App() {
             />
           )}
 
+          {/* Four-Eyes Approvals */}
           {activeTab === 'APPROVALS' && (
             <ApprovalsInbox
               approvals={approvals}
@@ -682,6 +1133,7 @@ export function App() {
             />
           )}
 
+          {/* Immutable Audit Log */}
           {activeTab === 'AUDIT' && (
             <LiveAuditLogViewer
               auditLogs={auditLogs}
@@ -689,8 +1141,10 @@ export function App() {
             />
           )}
 
+          {/* RBAC Matrix */}
           {activeTab === 'ROLES' && <RolesPermissionsView />}
 
+          {/* Station Settings */}
           {activeTab === 'SETTINGS' && (
             <StationSettings
               settings={stationSettings}
@@ -699,6 +1153,7 @@ export function App() {
             />
           )}
 
+          {/* First Run Bootstrap */}
           {activeTab === 'SETUP' && (
             <FirstRunSetup
               isSetupComplete={isSetupComplete}
@@ -707,6 +1162,24 @@ export function App() {
           )}
         </main>
       </div>
+
+      {/* Global Forensic Search Modal */}
+      <GlobalForensicSearch
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        obEntries={obEntries}
+        persons={persons}
+        custodyRecords={custodyRecords}
+        officers={officers}
+        activeOfficer={activeOfficer}
+        onSelectResult={(type, _id) => {
+          setIsSearchOpen(false);
+          if (type === 'OB') setActiveTab('OB_ENTRIES');
+          else if (type === 'CUSTODY' || type === 'PERSON') setActiveTab('CUSTODY');
+          else if (type === 'OFFICER') setActiveTab('OFFICERS');
+        }}
+        onLogAuditSearch={handleLogAuditSearch}
+      />
 
       {/* Onboarding Modal */}
       <OfficerOnboardingModal

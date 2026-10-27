@@ -262,11 +262,11 @@ export const AddEvidenceModal: React.FC<AddEvidenceModalProps> = ({
             </div>
           </div>
 
-          {/* Anti-corruption disclosure notice */}
+          {/* Evidence registration notice */}
           <div className="p-3 bg-amber-950/30 border border-amber-900/50 text-amber-300/90 rounded-xl text-xs flex items-start gap-2">
             <Shield className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
             <span>
-              Evidence registration triggers an immediate cryptographic entry in the Exhibit Ledger. All subsequent custody transfers will require dual acknowledgment.
+              Evidence registration logs an immediate permanent entry in the Exhibit Ledger. All subsequent custody transfers require dual acknowledgment.
             </span>
           </div>
 

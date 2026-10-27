@@ -98,8 +98,12 @@ export function setSecurityHeaders(req: IncomingMessage, res: ServerResponse): v
   }
 
   // Security Headers
+  if (typeof (res as any).removeHeader === 'function') {
+    (res as any).removeHeader('X-Powered-By');
+  }
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
   res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');

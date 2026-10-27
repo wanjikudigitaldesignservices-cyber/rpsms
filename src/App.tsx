@@ -37,8 +37,6 @@ import { ApprovalsInbox } from '@/components/admin/ApprovalsInbox';
 import { FirstRunSetup } from '@/components/admin/FirstRunSetup';
 import { MfaSetupModal } from '@/components/admin/MfaSetupModal';
 import { LoginPage } from '@/components/auth/LoginPage';
-import { RlsStatusModal } from '@/components/admin/RlsStatusModal';
-import { NeonStatusModal } from '@/components/admin/NeonStatusModal';
 
 // Phase 2 Components
 import { DigitalOccurrenceBook } from '@/components/ob/DigitalOccurrenceBook';
@@ -211,6 +209,22 @@ const INITIAL_OFFICERS: Officer[] = [
     created_at: '2026-10-27T00:00:00Z',
   },
   {
+    id: '00000000-0000-0000-0000-000000000018',
+    station_id: INITIAL_STATION.id,
+    service_number: 'ODPP-88219',
+    full_name: 'SC Anthony Wakoli',
+    role_id: 'DPP',
+    role_name: 'DPP',
+    rank: 'Senior State Counsel (ODPP Liaison)',
+    email: 'prosecutions.wakoli@odpp.go.ke',
+    phone_number: '+254711000018',
+    status: 'ACTIVE',
+    is_active: true,
+    mfa_enabled: false,
+    last_login_at: new Date(Date.now() - 150 * 60 * 1000).toISOString(),
+    created_at: '2026-10-27T00:00:00Z',
+  },
+  {
     id: '00000000-0000-0000-0000-000000000008',
     station_id: INITIAL_STATION.id,
     service_number: 'LQD-TECH-01',
@@ -334,8 +348,6 @@ export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
   const [, setCsrfToken] = useState<string>('');
-  const [isRlsOpen, setIsRlsOpen] = useState<boolean>(false);
-  const [isNeonModalOpen, setIsNeonModalOpen] = useState<boolean>(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
   const [isMfaOpen, setIsMfaOpen] = useState<boolean>(false);
 
@@ -1270,17 +1282,17 @@ export function App() {
     OB_ENTRIES: 'Occurrence Book (OB)',
     BOOK_IN: 'Detainee Book-In Desk',
     CUSTODY: '24h Custody Sentinel',
-    CASES: 'CID Case Files & IO Allocation',
-    AI_GRAPH: 'Sentinel AI Cross-Case Graph',
-    EVIDENCE: 'Exhibits & Cryptographic Chain of Custody',
+    CASES: 'CID Case Files & Allocation',
+    AI_GRAPH: 'Sentinel Criminal Intelligence Graph',
+    EVIDENCE: 'Exhibits & Custody Chain',
     BAIL: 'Cashless Bail Desk',
     LOGISTICS: 'Armory & Fleet Dispatch',
     OFFICERS: 'Station Roster & Personnel',
-    APPROVALS: 'Four-Eyes Dual Control Inbox',
-    AUDIT: 'SHA-256 Immutable Audit Ledger',
-    ROLES: 'Role-Based Access Control (RBAC)',
-    SETTINGS: 'Station Parameters & Security Settings',
-    SETUP: 'First-Run Bootstrap System',
+    APPROVALS: 'Four-Eyes Approvals Inbox',
+    AUDIT: 'Audit Trail',
+    ROLES: 'Roles & Access',
+    SETTINGS: 'Station Parameters',
+    SETUP: 'Authority Setup',
   };
 
   const activeInCustodyCount = custodyRecords.filter((c) => c.is_in_custody).length;
@@ -1322,8 +1334,6 @@ export function App() {
           } catch {}
           setIsTerminalLocked(true);
         }}
-        onOpenRlsModal={() => setIsRlsOpen(true)}
-        onOpenNeonModal={() => setIsNeonModalOpen(true)}
         onLogout={handleLogout}
         onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
         activeModuleName={MODULE_NAMES[activeTab] || 'Station Command'}
@@ -1356,6 +1366,7 @@ export function App() {
           }}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+          activeRole={activeRole}
           counts={sidebarCounts}
         />
 
@@ -1616,18 +1627,6 @@ export function App() {
           );
         }}
         serviceNumber={activeOfficer.service_number}
-      />
-
-      <RlsStatusModal
-        isOpen={isRlsOpen}
-        onClose={() => setIsRlsOpen(false)}
-        activeRole={activeRole}
-        activeServiceNumber={activeOfficer.service_number}
-      />
-
-      <NeonStatusModal
-        isOpen={isNeonModalOpen}
-        onClose={() => setIsNeonModalOpen(false)}
       />
     </div>
   );

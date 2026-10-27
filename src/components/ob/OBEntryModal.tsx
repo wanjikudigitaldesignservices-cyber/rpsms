@@ -471,23 +471,23 @@ export function OBEntryModal({
             />
           </div>
 
-          {/* Real-time Cryptographic Chain Preview */}
+          {/* Tamper-Evident Record Seal Preview */}
           <div className="rounded bg-zinc-900/60 border border-zinc-800 p-2.5 space-y-1.5 text-xs font-mono">
             <div className="flex items-center justify-between text-zinc-500">
               <span className="flex items-center gap-1.5 text-[10px]">
                 <Lock className="h-3 w-3 text-zinc-400" />
-                <span>PREVIOUS BLOCK HASH:</span>
+                <span>PREVIOUS RECORD SEAL:</span>
               </span>
-              <span className="text-zinc-500 truncate max-w-[280px] text-[10px]">{previousEntryHash}</span>
+              <span className="text-zinc-500 truncate max-w-[280px] text-[10px]">{previousEntryHash ? `${previousEntryHash.slice(0, 16)}...` : 'Genesis'}</span>
             </div>
 
             <div className="flex items-center justify-between text-zinc-300 border-t border-zinc-800/80 pt-1.5">
               <span className="flex items-center gap-1.5 text-[10px]">
                 <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-                <span>COMPUTED CURRENT ENTRY HASH:</span>
+                <span>RECORD STATUS:</span>
               </span>
               <span className="text-emerald-400 font-mono truncate max-w-[280px] text-[10px]">
-                {liveHash || 'Calculating SHA-256...'}
+                {liveHash ? 'Sealed & Ready for Registration' : 'Verifying record sequence...'}
               </span>
             </div>
           </div>

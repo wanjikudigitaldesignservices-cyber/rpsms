@@ -6,6 +6,8 @@ export type RoleName =
   | 'CELL_SERGEANT'
   | 'RECORDS_CLERK'
   | 'AUDITOR'
+  | 'DPP'
+  | 'ODPP_PROSECUTOR'
   | 'ADMIN_SUPER_OWNER';
 
 export type OfficerStatus = 'ACTIVE' | 'SUSPENDED' | 'ON_LEAVE' | 'RETIRED' | 'PENDING_INVITE';

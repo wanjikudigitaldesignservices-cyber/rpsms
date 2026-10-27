@@ -20,5 +20,12 @@ export default defineConfig(() => {
       'process.env.APP_NAME': JSON.stringify('Rockport Police Station Management System'),
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
     },
+    esbuild: {
+      drop: ['console', 'debugger'],
+      legalComments: 'none',
+    } as any,
+    build: {
+      sourcemap: false,
+    },
   }
 })

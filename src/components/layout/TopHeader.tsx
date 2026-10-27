@@ -5,7 +5,6 @@ import {
   Clock,
   LogOut,
   Menu,
-  Cloud,
 } from 'lucide-react';
 import type { Officer } from '../../types';
 
@@ -15,8 +14,6 @@ interface TopHeaderProps {
   onResetTimer: () => void;
   onOpenCommandSearch: () => void;
   onLockTerminal: () => void;
-  onOpenRlsModal: () => void;
-  onOpenNeonModal?: () => void;
   onLogout: () => void;
   onToggleSidebar?: () => void;
   activeModuleName: string;
@@ -28,12 +25,37 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onResetTimer,
   onOpenCommandSearch,
   onLockTerminal,
-  onOpenRlsModal,
-  onOpenNeonModal,
   onLogout,
   onToggleSidebar,
   activeModuleName,
 }) => {
+  const isOcs = activeOfficer.role_name === 'OCS' || (activeOfficer as any).role === 'OCS' || activeOfficer.role_id === 'OCS';
+  const [systemHealth, setSystemHealth] = React.useState<'OPERATIONAL' | 'DEGRADED' | 'CHECKING'>('CHECKING');
+
+  React.useEffect(() => {
+    if (!isOcs) return;
+    let mounted = true;
+    async function checkHealth() {
+      try {
+        const res = await fetch('/api/system/health', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted) setSystemHealth(data.status === 'OPERATIONAL' ? 'OPERATIONAL' : 'DEGRADED');
+        } else {
+          if (mounted) setSystemHealth('DEGRADED');
+        }
+      } catch {
+        if (mounted) setSystemHealth('DEGRADED');
+      }
+    }
+    checkHealth();
+    const interval = setInterval(checkHealth, 60000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [isOcs]);
+
   const formatCountdown = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -119,33 +141,36 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               <span className="text-zinc-500">{activeOfficer.service_number}</span>
               <span>•</span>
               <span className="px-1.5 py-0.5 rounded bg-zinc-800/90 text-zinc-300 font-semibold border border-zinc-700/60 text-[9px]">
-                {activeOfficer.role_name || activeOfficer.role}
+                {activeOfficer.role_name || (activeOfficer as any).role || activeOfficer.role_id}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Neon Cloud Services Inspector */}
-        {onOpenNeonModal && (
-          <button
-            onClick={onOpenNeonModal}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-300 hover:bg-zinc-800 transition"
-            title="Inspect Neon Serverless Cloud Infrastructure (Postgres, Auth, Functions, Storage, Realtime)"
+        {/* OCS-Only Neutral System Status Indicator */}
+        {isOcs && (
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-300 select-none"
+            title="System Status"
           >
-            <Cloud className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden xl:inline">Neon Cloud</span>
-          </button>
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                systemHealth === 'OPERATIONAL'
+                  ? 'bg-emerald-500'
+                  : systemHealth === 'DEGRADED'
+                  ? 'bg-amber-500 animate-pulse'
+                  : 'bg-zinc-500'
+              }`}
+            />
+            <span className="hidden xl:inline">
+              {systemHealth === 'OPERATIONAL'
+                ? 'System operational'
+                : systemHealth === 'DEGRADED'
+                ? 'System alert'
+                : 'System check'}
+            </span>
+          </div>
         )}
-
-        {/* RLS Telemetry Button */}
-        <button
-          onClick={onOpenRlsModal}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-300 hover:bg-zinc-800 transition"
-          title="Inspect PostgreSQL Row-Level Security Status"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          <span className="hidden xl:inline">RLS Active</span>
-        </button>
 
         {/* Sign Out */}
         <button

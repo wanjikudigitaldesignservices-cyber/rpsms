@@ -25,6 +25,7 @@ interface SidebarProps {
   onTabChange: (tab: NavigationModule) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  activeRole?: string;
   counts: {
     ob: number;
     custody: number;
@@ -60,8 +61,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onTabChange,
   isCollapsed,
   onToggleCollapse,
+  activeRole,
   counts,
 }) => {
+  const isOcs = activeRole === 'OCS' || activeRole === 'ADMIN_SUPER_OWNER';
+  const canViewAudit = isOcs || activeRole === 'AUDITOR';
   const sections: NavSection[] = [
     {
       title: 'FRONT DESK & CUSTODY',
@@ -153,7 +157,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ],
     },
     {
-      title: 'OCS COMMAND & GOVERNANCE',
+      title: 'COMMAND & GOVERNANCE',
       code: '04',
       items: [
         {
@@ -164,32 +168,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
           badge: counts.approvals > 0 ? counts.approvals : undefined,
           badgeType: counts.approvals > 0 ? 'amber' : 'neutral',
         },
-        {
-          id: 'AUDIT',
-          label: 'Cryptographic Audit',
-          shortLabel: 'Audit',
-          icon: FileText,
-          badge: 'SHA-256',
-          badgeType: 'neutral',
-        },
-        {
-          id: 'ROLES',
-          label: 'RBAC & RLS Matrix',
-          shortLabel: 'RBAC',
-          icon: Shield,
-        },
+        ...(canViewAudit
+          ? [{
+              id: 'AUDIT' as NavigationModule,
+              label: 'Audit Trail',
+              shortLabel: 'Audit',
+              icon: FileText,
+            }]
+          : []),
+        ...(isOcs
+          ? [{
+              id: 'ROLES' as NavigationModule,
+              label: 'Roles & Access',
+              shortLabel: 'Roles',
+              icon: Shield,
+            }]
+          : []),
         {
           id: 'SETTINGS',
           label: 'Station Configuration',
           shortLabel: 'Config',
           icon: Settings,
         },
-        {
-          id: 'SETUP',
-          label: 'Bootstrap Authority',
-          shortLabel: 'Setup',
-          icon: KeyRound,
-        },
+        ...(isOcs
+          ? [{
+              id: 'SETUP' as NavigationModule,
+              label: 'Bootstrap Authority',
+              shortLabel: 'Setup',
+              icon: KeyRound,
+            }]
+          : []),
       ],
     },
   ];
@@ -310,14 +318,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="p-2 bg-zinc-900/70 border border-zinc-800/80 rounded-md text-[11px] space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-zinc-400 font-medium flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                Zero-Trust Active
+                <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
+                Station Operations
               </span>
-              <span className="font-mono text-[10px] text-emerald-400">RLS 34/34</span>
+              <span className="font-mono text-[10px] text-zinc-400">RPS-001</span>
             </div>
             <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono">
-              <span>LEDGER: CHAIN_OK</span>
-              <span>v3.4.0</span>
+              <span>Status: Active</span>
+              <span>Online</span>
             </div>
           </div>
         ) : (

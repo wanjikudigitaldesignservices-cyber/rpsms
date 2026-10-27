@@ -235,11 +235,11 @@ export const EvidenceQRModal: React.FC<EvidenceQRModalProps> = ({
             </div>
           </div>
 
-          {/* Cryptographic UID Stamp */}
+          {/* Digital Evidence Seal */}
           <div className="p-3 bg-slate-950 border border-slate-800 print:border-gray-300 rounded-xl flex items-center justify-between text-xs">
             <div className="truncate">
               <span className="text-[10px] uppercase font-bold text-slate-500 print:text-black block">
-                Cryptographic Seal (SHA-256 Checksum)
+                Digital Evidence Seal
               </span>
               <span className="font-mono text-[11px] text-cyan-400 print:text-black font-semibold truncate block">
                 {evidence.qr_code_identifier}

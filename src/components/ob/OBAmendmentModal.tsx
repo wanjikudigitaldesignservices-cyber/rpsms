@@ -123,8 +123,8 @@ export function OBAmendmentModal({
           </p>
           <div className="text-[11px] font-mono text-slate-500 flex items-center gap-2">
             <Lock className="h-3 w-3 text-emerald-400" />
-            <span>Cryptographic Entry Hash:</span>
-            <span className="text-slate-400 truncate">{entry.entry_hash}</span>
+            <span>Verification Seal:</span>
+            <span className="text-slate-400 truncate">{entry.entry_hash.slice(0, 16)}...</span>
           </div>
         </div>
 

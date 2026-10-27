@@ -27,8 +27,8 @@ export const TerminalLockScreen: React.FC<TerminalLockScreenProps> = ({
     setIsLoading(true);
 
     try {
-      // Re-verify credentials against server endpoint
-      const res = await fetch('/api/auth/login', {
+      // Re-verify credentials against server unlock endpoint
+      const res = await fetch('/api/auth/unlock', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -36,14 +36,13 @@ export const TerminalLockScreen: React.FC<TerminalLockScreenProps> = ({
         },
         credentials: 'include',
         body: JSON.stringify({
-          serviceNumber: activeOfficer.service_number,
           password: password
         })
       });
 
       const data = await res.json();
 
-      if (res.ok && (data.user || data.status === 'TOTP_REQUIRED')) {
+      if (res.ok && data.status === 'UNLOCKED') {
         setPassword('');
         setError(null);
         onUnlock();

@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import crypto from 'crypto';
 import { getDb } from './db.js';
 
 export interface AuthenticatedUser {
@@ -13,6 +14,8 @@ export interface AuthenticatedUser {
   mfa_enabled: boolean;
   must_change_password: boolean;
   sessionId: string;
+  tokenHash: string;
+  isLocked: boolean;
   csrfToken: string;
 }
 
@@ -84,7 +87,6 @@ export function getClientIp(req: IncomingMessage): string {
  * Apply Fort-Knox HTTP Security Headers to every response
  */
 export function setSecurityHeaders(req: IncomingMessage, res: ServerResponse): void {
-  // CORS locked to app's own origin
   const origin = req.headers.origin || '';
   const host = req.headers.host || '';
   
@@ -105,12 +107,20 @@ export function setSecurityHeaders(req: IncomingMessage, res: ServerResponse): v
 }
 
 /**
+ * Hash raw session token at rest using SHA-256
+ */
+export function hashSessionToken(rawToken: string): string {
+  return crypto.createHash('sha256').update(rawToken).digest('hex');
+}
+
+/**
  * Require valid session and enforce role authorization (RBAC)
  */
 export async function requireAuth(
   req: IncomingMessage,
   res: ServerResponse,
-  allowedRoles?: string[]
+  allowedRoles?: string[],
+  options?: { allowLocked?: boolean }
 ): Promise<AuthenticatedUser | null> {
   setSecurityHeaders(req, res);
 
@@ -122,21 +132,24 @@ export async function requireAuth(
   }
 
   const cookies = parseCookies(req.headers.cookie);
-  const sessionId = cookies[SESSION_COOKIE_NAME];
+  const rawToken = cookies[SESSION_COOKIE_NAME];
 
-  if (!sessionId) {
+  if (!rawToken) {
     res.statusCode = 401;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ error: 'Unauthorized: No active session' }));
     return null;
   }
 
+  const tokenHash = hashSessionToken(rawToken);
   const sql = getDb();
 
-  // Query session joined with active officer
+  // Query session joined with active officer via token_hash (fallback to id for legacy sessions)
   const rows = await sql`
     SELECT 
       s.id as session_id,
+      s.token_hash,
+      s.is_locked,
       s.csrf_token,
       s.expires_at,
       s.idle_expires_at,
@@ -152,12 +165,13 @@ export async function requireAuth(
       o.must_change_password
     FROM sessions s
     JOIN officers o ON o.id = s.officer_id
-    WHERE s.id = ${sessionId} AND o.status = 'ACTIVE' AND o.is_deleted = false
+    WHERE (s.token_hash = ${tokenHash} OR s.id = ${rawToken})
+      AND o.status = 'ACTIVE' 
+      AND o.is_deleted = false
     LIMIT 1;
   `;
 
   if (rows.length === 0) {
-    // Invalidate invalid session cookie
     res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE_NAME, '', {
       httpOnly: true,
       secure: true,
@@ -179,7 +193,7 @@ export async function requireAuth(
 
   // Check absolute timeout (8 hours)
   if (now > expiresAt) {
-    await sql`DELETE FROM sessions WHERE id = ${sessionId};`;
+    await sql`DELETE FROM sessions WHERE id = ${session.session_id};`;
     res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE_NAME, '', {
       httpOnly: true,
       secure: true,
@@ -196,7 +210,7 @@ export async function requireAuth(
 
   // Check idle timeout (15 minutes)
   if (now > idleExpiresAt) {
-    await sql`DELETE FROM sessions WHERE id = ${sessionId};`;
+    await sql`DELETE FROM sessions WHERE id = ${session.session_id};`;
     res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE_NAME, '', {
       httpOnly: true,
       secure: true,
@@ -208,6 +222,17 @@ export async function requireAuth(
     res.statusCode = 401;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ error: 'Unauthorized: Session expired due to inactivity (15m).' }));
+    return null;
+  }
+
+  // Check Server-Side Session Lock
+  if (session.is_locked && !options?.allowLocked) {
+    res.statusCode = 423; // HTTP 423 Locked
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ 
+      error: 'Terminal is locked. Re-authentication required to resume session.',
+      isLocked: true 
+    }));
     return null;
   }
 
@@ -233,13 +258,15 @@ export async function requireAuth(
     }
   }
 
-  // Slide idle timeout: extend by 15 minutes from now
-  const newIdleExpiry = new Date(now.getTime() + IDLE_TIMEOUT_MINUTES * 60 * 1000).toISOString();
-  await sql`
-    UPDATE sessions 
-    SET last_active_at = now(), idle_expires_at = ${newIdleExpiry}
-    WHERE id = ${sessionId};
-  `;
+  // Slide idle timeout: extend by 15 minutes from now if active and not locked
+  if (!session.is_locked) {
+    const newIdleExpiry = new Date(now.getTime() + IDLE_TIMEOUT_MINUTES * 60 * 1000).toISOString();
+    await sql`
+      UPDATE sessions 
+      SET last_active_at = now(), idle_expires_at = ${newIdleExpiry}
+      WHERE id = ${session.session_id};
+    `;
+  }
 
   return {
     id: session.id,
@@ -253,6 +280,8 @@ export async function requireAuth(
     mfa_enabled: session.mfa_enabled,
     must_change_password: session.must_change_password,
     sessionId: session.session_id,
+    tokenHash: session.token_hash || tokenHash,
+    isLocked: !!session.is_locked,
     csrfToken: session.csrf_token
   };
 }

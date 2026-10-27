@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getDb } from '../_lib/db.js';
 import { logAuditEvent } from '../_lib/audit.js';
 import { requireAuth, parseJsonBody, getClientIp } from '../_lib/auth.js';
+import { validatePasswordPolicy } from '../_lib/password.js';
 
 const UpdateOfficerSchema = z.object({
   status: z.enum(['ACTIVE', 'SUSPENDED', 'TRANSFERRED', 'RETIRED']).optional(),
@@ -56,6 +57,13 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
       let newPasswordHash: string | undefined = undefined;
       if (resetPassword) {
+        const policyCheck = validatePasswordPolicy(resetPassword);
+        if (!policyCheck.valid) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: policyCheck.error }));
+          return;
+        }
         const salt = await bcrypt.genSalt(12);
         newPasswordHash = await bcrypt.hash(resetPassword, salt);
       }

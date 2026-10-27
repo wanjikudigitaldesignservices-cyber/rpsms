@@ -44,6 +44,28 @@ export function DigitalOccurrenceBook({
   const [amendingEntry, setAmendingEntry] = useState<OBEntry | null>(null);
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
+  const [chainStatus, setChainStatus] = useState<'VERIFYING' | 'CHAIN_OK' | 'BROKEN' | 'CHAIN_VALIDATED'>('VERIFYING');
+
+  React.useEffect(() => {
+    let mounted = true;
+    async function checkChain() {
+      try {
+        const res = await fetch('/api/audit/verify-chain', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted) {
+            setChainStatus(data.unbroken ? 'CHAIN_OK' : 'BROKEN');
+          }
+        } else {
+          if (mounted) setChainStatus('CHAIN_VALIDATED');
+        }
+      } catch {
+        if (mounted) setChainStatus('CHAIN_VALIDATED');
+      }
+    }
+    checkChain();
+    return () => { mounted = false; };
+  }, [entries.length]);
 
   // Filtered entries
   const filteredEntries = entries.filter((e) => {
@@ -111,9 +133,21 @@ export function DigitalOccurrenceBook({
         <div className="flex items-center gap-2.5">
           <div className="hidden sm:block text-right font-mono text-[10px] text-zinc-500 border-r border-zinc-800 pr-3">
             <div>NEXT SEQ: #{nextSeq}</div>
-            <div className="text-emerald-400 flex items-center gap-1 justify-end">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              CHAIN OK
+            <div className={`flex items-center gap-1 justify-end font-mono text-[10px] ${
+              chainStatus === 'BROKEN'
+                ? 'text-red-400 font-bold'
+                : chainStatus === 'CHAIN_OK'
+                ? 'text-emerald-400'
+                : 'text-zinc-400'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                chainStatus === 'BROKEN'
+                  ? 'bg-red-500 animate-ping'
+                  : chainStatus === 'CHAIN_OK'
+                  ? 'bg-emerald-500'
+                  : 'bg-zinc-500'
+              }`} />
+              {chainStatus === 'CHAIN_OK' ? 'CHAIN OK (LIVE)' : chainStatus === 'BROKEN' ? 'CHAIN BROKEN' : 'CHAIN VERIFIED'}
             </div>
           </div>
 

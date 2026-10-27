@@ -5,6 +5,8 @@ import { getDb } from '../_lib/db.js';
 import { logAuditEvent } from '../_lib/audit.js';
 import { requireAuth, parseJsonBody, getClientIp } from '../_lib/auth.js';
 
+import { validatePasswordPolicy } from '../_lib/password.js';
+
 const ChangePasswordSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(12, 'Password must be at least 12 characters').max(128)
@@ -37,6 +39,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     const { currentPassword, newPassword } = parsed.data;
+
+    const policyCheck = validatePasswordPolicy(newPassword);
+    if (!policyCheck.valid) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: policyCheck.error }));
+      return;
+    }
 
     // Verify current password
     const officerRes = await sql`

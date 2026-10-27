@@ -9,8 +9,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
-  // requireAuth handles cookie parsing, session check, idle timeout slide, and returns user or 401
-  const user = await requireAuth(req, res);
+  // Allow locked session check so client knows terminal is locked
+  const user = await requireAuth(req, res, undefined, { allowLocked: true });
   if (!user) return;
 
   res.statusCode = 200;
@@ -27,6 +27,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       status: user.status,
       must_change_password: user.must_change_password
     },
+    isLocked: user.isLocked,
     csrfToken: user.csrfToken
   }));
 }

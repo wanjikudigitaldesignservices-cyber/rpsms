@@ -219,8 +219,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       WHERE id = ${officer.id};
     `;
 
-    // 7. Generate Secure Cryptographic Session
-    const sessionId = crypto.randomBytes(32).toString('hex');
+    // 7. Rotate Session: Terminate any existing sessions for this officer
+    await sql`
+      DELETE FROM sessions WHERE officer_id = ${officer.id};
+    `;
+
+    // Generate Secure Cryptographic Session & Hash at rest
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const sessionId = crypto.randomUUID();
     const csrfToken = crypto.randomBytes(32).toString('hex');
     const now = new Date();
     const idleExpiresAt = new Date(now.getTime() + IDLE_TIMEOUT_MINUTES * 60 * 1000).toISOString();
@@ -228,9 +235,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     await sql`
       INSERT INTO sessions (
-        id, officer_id, created_at, last_active_at, expires_at, idle_expires_at, ip_address, user_agent, csrf_token
+        id, token_hash, officer_id, created_at, last_active_at, expires_at, idle_expires_at, ip_address, user_agent, csrf_token, is_locked
       ) VALUES (
-        ${sessionId}, ${officer.id}, now(), now(), ${absoluteExpiresAt}, ${idleExpiresAt}, ${clientIp}, ${userAgent}, ${csrfToken}
+        ${sessionId}, ${tokenHash}, ${officer.id}, now(), now(), ${absoluteExpiresAt}, ${idleExpiresAt}, ${clientIp}, ${userAgent}, ${csrfToken}, false
       );
     `;
 
@@ -251,8 +258,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       justification: 'Officer session established'
     });
 
-    // 9. Set Secure HttpOnly Cookie
-    const cookieHeader = serializeCookie(SESSION_COOKIE_NAME, sessionId, {
+    // 9. Set Secure HttpOnly Cookie with rawToken (DB stores token_hash only)
+    const cookieHeader = serializeCookie(SESSION_COOKIE_NAME, rawToken, {
       httpOnly: true,
       secure: true,
       sameSite: 'strict',

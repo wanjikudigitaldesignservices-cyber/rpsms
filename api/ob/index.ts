@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { getDb } from '../_lib/db.js';
+import { getDb, getDbClient } from '../_lib/db.js';
 import { logAuditEvent } from '../_lib/audit.js';
 import { requireAuth, parseJsonBody, getClientIp } from '../_lib/auth.js';
 
@@ -69,79 +69,91 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
       const { category, subject, narrative, reportingPersonName, reportingPersonPhone } = parsed.data;
 
-      // Fetch last entry hash & sequence
-      const lastEntry = await sql`
-        SELECT seq_number, entry_hash 
-        FROM ob_entries 
-        ORDER BY seq_number DESC 
-        LIMIT 1;
-      `;
+      const client = await getDbClient();
+      let insertedEntry: any = null;
 
-      const seqNumber = lastEntry.length > 0 ? Number(lastEntry[0].seq_number) + 1 : 1;
-      const previousHash = lastEntry.length > 0 ? (lastEntry[0].entry_hash as string) : 'GENESIS_OB_LEDGER_HASH_0000000000000000000000000000000000000000000000';
-      const year = new Date().getFullYear();
-      const obNumber = `OB ${seqNumber}/${year}`;
+      try {
+        await client.query('BEGIN;');
+        // Acquire PostgreSQL transaction-level advisory lock on the ledger sequence key
+        await client.query("SELECT pg_advisory_xact_lock(hashtext('ob_ledger_sequence_lock'));");
 
-      // Hash reporting phone if provided
-      const phoneHash = reportingPersonPhone ? crypto.createHash('sha256').update(reportingPersonPhone.trim()).digest('hex') : null;
+        // Fetch last sequence number and hash strictly inside the locked transaction
+        const lastRes = await client.query('SELECT seq_number, entry_hash FROM ob_entries ORDER BY seq_number DESC LIMIT 1 FOR UPDATE;');
+        const lastEntry = lastRes.rows;
 
-      // Compute cryptographic entry hash
-      const hashPayload = `${obNumber}:${seqNumber}:${category}:${subject}:${narrative}:${previousHash}:${user.id}`;
-      const entryHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
+        const seqNumber = lastEntry.length > 0 ? Number(lastEntry[0].seq_number) + 1 : 1;
+        const previousHash = lastEntry.length > 0 ? (lastEntry[0].entry_hash as string) : 'GENESIS_OB_LEDGER_HASH_0000000000000000000000000000000000000000000000';
+        const year = new Date().getFullYear();
+        const obNumber = `OB ${seqNumber}/${year}`;
 
-      const inserted = await sql`
-        INSERT INTO ob_entries (
-          station_id,
-          ob_number,
-          seq_number,
-          incident_date,
-          entry_timestamp,
+        // Hash reporting phone if provided
+        const phoneHash = reportingPersonPhone ? crypto.createHash('sha256').update(reportingPersonPhone.trim()).digest('hex') : null;
+
+        // Canonical server-side SHA-256 hash calculation
+        const hashPayload = `${obNumber}:${seqNumber}:${category}:${subject.trim()}:${narrative.trim()}:${previousHash}:${user.id}`;
+        const entryHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
+
+        const insertRes = await client.query(`
+          INSERT INTO ob_entries (
+            station_id,
+            ob_number,
+            seq_number,
+            incident_date,
+            entry_timestamp,
+            category,
+            subject,
+            narrative,
+            recorded_by,
+            reporting_person_name,
+            reporting_person_phone_hash,
+            previous_entry_hash,
+            entry_hash,
+            status,
+            created_by
+          ) VALUES (
+            $1, $2, $3, CURRENT_DATE, now(), $4, $5, $6, $7, $8, $9, $10, $11, 'OPEN', $12
+          )
+          RETURNING *;
+        `, [
+          user.station_id,
+          obNumber,
+          seqNumber,
           category,
-          subject,
-          narrative,
-          recorded_by,
-          reporting_person_name,
-          reporting_person_phone_hash,
-          previous_entry_hash,
-          entry_hash,
-          status,
-          created_by
-        ) VALUES (
-          ${user.station_id},
-          ${obNumber},
-          ${seqNumber},
-          CURRENT_DATE,
-          now(),
-          ${category},
-          ${subject.trim()},
-          ${narrative.trim()},
-          ${user.id},
-          ${reportingPersonName?.trim() || null},
-          ${phoneHash},
-          ${previousHash},
-          ${entryHash},
-          'OPEN',
-          ${user.id}
-        )
-        RETURNING *;
-      `;
+          subject.trim(),
+          narrative.trim(),
+          user.id,
+          reportingPersonName?.trim() || null,
+          phoneHash,
+          previousHash,
+          entryHash,
+          user.id
+        ]);
+
+        await client.query('COMMIT;');
+        insertedEntry = insertRes.rows[0];
+      } catch (txErr) {
+        await client.query('ROLLBACK;').catch(() => {});
+        throw txErr;
+      } finally {
+        await client.end().catch(() => {});
+      }
 
       await logAuditEvent({
         stationId: user.station_id,
         actionType: 'OB_ENTRY_CREATED',
         tableName: 'ob_entries',
-        recordId: inserted[0].id,
+        recordId: insertedEntry.id,
         actorId: user.id,
         actorServiceNumber: user.service_number,
         actorRole: user.role_id,
         ipAddress: clientIp,
         userAgent,
-        justification: `Officer recorded OB entry ${obNumber}`
+        justification: `Officer recorded OB entry ${insertedEntry.ob_number}`
       });
 
       res.statusCode = 201;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ entry: inserted[0] }));
+      res.end(JSON.stringify({ entry: insertedEntry }));
     } catch (err: any) {
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');

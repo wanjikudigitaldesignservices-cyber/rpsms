@@ -359,6 +359,9 @@ export function App() {
             setActiveOfficerId(data.user.id);
             setCsrfToken(data.csrfToken || '');
             setIsAuthenticated(true);
+            if (data.isLocked) {
+              setIsTerminalLocked(true);
+            }
             resetSessionTimer();
           }
         } else {
@@ -1310,21 +1313,37 @@ export function App() {
       {/* Institutional Top Header */}
       <TopHeader
         activeOfficer={activeOfficer}
-        officers={officers}
-        onSwitchOfficer={(officerId) => {
-          setActiveOfficerId(officerId);
-          resetSessionTimer();
-        }}
         secondsRemaining={secondsRemaining}
         onResetTimer={resetSessionTimer}
         onOpenCommandSearch={() => setIsCopilotOpen(true)}
-        onLockTerminal={() => setIsTerminalLocked(true)}
+        onLockTerminal={async () => {
+          try {
+            await fetch('/api/auth/lock', { method: 'POST', credentials: 'include' });
+          } catch {}
+          setIsTerminalLocked(true);
+        }}
         onOpenRlsModal={() => setIsRlsOpen(true)}
         onOpenNeonModal={() => setIsNeonModalOpen(true)}
         onLogout={handleLogout}
         onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
         activeModuleName={MODULE_NAMES[activeTab] || 'Station Command'}
       />
+
+      {/* Session Inactivity Timeout Warning Banner (<= 60s) */}
+      {isAuthenticated && !isTerminalLocked && secondsRemaining <= 60 && secondsRemaining > 0 && (
+        <div className="bg-amber-950/90 border-b border-amber-600/60 px-4 py-2 flex items-center justify-between text-xs font-mono text-amber-200 z-50">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+            <span>SESSION TIMEOUT WARNING: Terminal session will automatically terminate in {secondsRemaining} seconds due to inactivity.</span>
+          </div>
+          <button
+            onClick={resetSessionTimer}
+            className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-zinc-950 font-bold rounded text-xs transition"
+          >
+            Extend Session (+15m)
+          </button>
+        </div>
+      )}
 
       {/* Main Container: Collapsible Sidebar + Content Viewport */}
       <div className="flex-1 flex overflow-hidden">

@@ -11,8 +11,6 @@ import type { Officer } from '../../types';
 
 interface TopHeaderProps {
   activeOfficer: Officer;
-  officers: Officer[];
-  onSwitchOfficer: (officerId: string) => void;
   secondsRemaining: number;
   onResetTimer: () => void;
   onOpenCommandSearch: () => void;
@@ -26,8 +24,6 @@ interface TopHeaderProps {
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   activeOfficer,
-  officers,
-  onSwitchOfficer,
   secondsRemaining,
   onResetTimer,
   onOpenCommandSearch,
@@ -113,31 +109,20 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <span className="text-[11px]">{formatCountdown(secondsRemaining)}</span>
         </button>
 
-        {/* Active Officer Identity & Role Switcher */}
-        <div className="flex items-center gap-2 pl-2 border-l border-zinc-800">
-          <div className="text-right hidden sm:block">
-            <div className="text-xs font-medium text-zinc-200 truncate max-w-[130px]">
-              {activeOfficer.full_name}
+        {/* Active Authenticated Officer Identity (Read-only Server Enforcement) */}
+        <div className="flex items-center gap-2.5 pl-3 border-l border-zinc-800">
+          <div className="text-right">
+            <div className="text-xs font-medium text-zinc-100 truncate max-w-[150px]">
+              {activeOfficer.rank}: {activeOfficer.full_name}
             </div>
-            <div className="text-[10px] font-mono text-zinc-500 flex items-center justify-end gap-1">
-              <span>{activeOfficer.service_number}</span>
+            <div className="text-[10px] font-mono text-zinc-400 flex items-center justify-end gap-1.5">
+              <span className="text-zinc-500">{activeOfficer.service_number}</span>
               <span>•</span>
-              <span className="text-zinc-400">{activeOfficer.role_name}</span>
+              <span className="px-1.5 py-0.5 rounded bg-zinc-800/90 text-zinc-300 font-semibold border border-zinc-700/60 text-[9px]">
+                {activeOfficer.role_name || activeOfficer.role}
+              </span>
             </div>
           </div>
-
-          <select
-            value={activeOfficer.id}
-            onChange={(e) => onSwitchOfficer(e.target.value)}
-            className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 font-mono"
-            title="Switch logged-in officer profile (To verify RLS & permissions)"
-          >
-            {officers.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.role_name}: {o.full_name.split(' ')[0]} ({o.service_number})
-              </option>
-            ))}
-          </select>
         </div>
 
         {/* Neon Cloud Services Inspector */}

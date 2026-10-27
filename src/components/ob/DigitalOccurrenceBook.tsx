@@ -3,10 +3,8 @@ import {
   FileText, 
   Search, 
   Plus, 
-  ShieldCheck, 
   Lock, 
   Clock, 
-  User, 
   Copy, 
   Check, 
   FileEdit,
@@ -14,7 +12,7 @@ import {
   ChevronUp,
   UserPlus
 } from 'lucide-react';
-import type { OBEntry, OBCategory, OBStatus, Officer } from '@/types';
+import type { OBEntry, OBStatus, Officer } from '@/types';
 import { OBEntryModal } from './OBEntryModal';
 import { OBAmendmentModal } from './OBAmendmentModal';
 
@@ -31,26 +29,6 @@ interface DigitalOccurrenceBookProps {
   }) => void;
   onNavigateToBookIn?: (obEntry: OBEntry) => void;
 }
-
-const CATEGORY_COLORS: Record<OBCategory, { bg: string; text: string; border: string }> = {
-  CRIMINAL: { bg: 'bg-red-950/40', text: 'text-red-400', border: 'border-red-800/60' },
-  TRAFFIC: { bg: 'bg-amber-950/40', text: 'text-amber-400', border: 'border-amber-800/60' },
-  INCIDENT: { bg: 'bg-blue-950/40', text: 'text-blue-400', border: 'border-blue-800/60' },
-  REPORT: { bg: 'bg-purple-950/40', text: 'text-purple-400', border: 'border-purple-800/60' },
-  DIRECTIVE: { bg: 'bg-emerald-950/40', text: 'text-emerald-400', border: 'border-emerald-800/60' },
-  PUBLIC_COMPLAINT: { bg: 'bg-rose-950/40', text: 'text-rose-400', border: 'border-rose-800/60' },
-  LOST_PROPERTY: { bg: 'bg-cyan-950/40', text: 'text-cyan-400', border: 'border-cyan-800/60' },
-  OTHER: { bg: 'bg-slate-900', text: 'text-slate-400', border: 'border-slate-700' },
-};
-
-const STATUS_BADGES: Record<OBStatus, string> = {
-  OPEN: 'bg-blue-900/60 text-blue-200 border-blue-700',
-  ASSIGNED: 'bg-amber-900/60 text-amber-200 border-amber-700',
-  AMENDED: 'bg-purple-900/60 text-purple-200 border-purple-700',
-  UNDER_INVESTIGATION: 'bg-orange-900/60 text-orange-200 border-orange-700',
-  CLOSED: 'bg-slate-800 text-slate-300 border-slate-700',
-  COURT_PENDING: 'bg-emerald-900/60 text-emerald-200 border-emerald-700',
-};
 
 export function DigitalOccurrenceBook({
   entries,
@@ -94,80 +72,81 @@ export function DigitalOccurrenceBook({
     setTimeout(() => setCopiedHash(null), 2000);
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Top Banner & Station Ledger Identity */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <img
-              src="/crest.jpg"
-              alt="Rockport Police Crest"
-              className="h-14 w-14 rounded-full border-2 border-amber-500/80 object-cover shadow-lg"
-              onError={(e) => {
-                // Fallback if crest image fails
-                (e.target as HTMLElement).style.display = 'none';
-              }}
-            />
-          </div>
+  const getStatusDot = (status: OBStatus) => {
+    switch (status) {
+      case 'OPEN':
+      case 'UNDER_INVESTIGATION':
+        return 'bg-amber-500 animate-pulse';
+      case 'COURT_PENDING':
+        return 'bg-emerald-500';
+      case 'AMENDED':
+        return 'bg-zinc-400';
+      case 'CLOSED':
+      default:
+        return 'bg-zinc-600';
+    }
+  };
 
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black tracking-wide text-slate-100 uppercase">
-                Digital Occurrence Book (OB)
-              </h1>
-              <span className="font-mono text-xs font-bold bg-amber-500 text-slate-950 px-2 py-0.5 rounded shadow-xs">
-                RPS-001
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Statutory Incident Ledger • Gap-Free Chronological Sequence • Cryptographically Chained
-            </p>
+  return (
+    <div className="space-y-4">
+      {/* Top Banner: Palantir Style Header */}
+      <div className="bg-zinc-950 border border-zinc-800/80 rounded-md p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">
+              NATIONAL POLICE SERVICE // STATION DESK
+            </span>
+            <span className="px-1.5 py-0.2 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded text-[10px] font-mono">
+              RPS-001
+            </span>
           </div>
+          <h2 className="text-base font-semibold text-zinc-100 tracking-tight mt-0.5">
+            Digital Occurrence Book (OB)
+          </h2>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Cryptographic SHA-256 block ledger • Gap-free sequential numbering • Anti-corruption amendment locks
+          </p>
         </div>
 
-        {/* Ledger Integrity & Action Controls */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-950/40 border border-emerald-800/60 px-3 py-1.5 text-xs text-emerald-300">
-            <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
-            <div className="font-mono text-[11px]">
-              <div>LEDGER HASH CHAIN: <strong className="text-emerald-400">INTACT</strong></div>
-              <div className="text-slate-400">Total Entries: <strong>{entries.length}</strong></div>
+        <div className="flex items-center gap-2.5">
+          <div className="hidden sm:block text-right font-mono text-[10px] text-zinc-500 border-r border-zinc-800 pr-3">
+            <div>NEXT SEQ: #{nextSeq}</div>
+            <div className="text-emerald-400 flex items-center gap-1 justify-end">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              CHAIN OK
             </div>
           </div>
 
           <button
             onClick={() => setIsNewEntryOpen(true)}
-            className="flex items-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2.5 text-xs transition-colors shadow-lg"
+            className="flex items-center gap-1.5 px-3 py-2 bg-zinc-100 hover:bg-white text-zinc-950 font-medium text-xs rounded-md shadow transition shrink-0"
           >
-            <Plus className="h-4 w-4" />
-            <span>Record New OB Entry</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>Record OB Entry</span>
           </button>
         </div>
       </div>
 
-      {/* Filter and Search Toolbar */}
+      {/* Filter and Search Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-        {/* Search Input */}
         <div className="sm:col-span-6 relative">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-zinc-500" />
           <input
             type="text"
-            placeholder="Search by OB number, subject, narrative, reporting person, or officer..."
+            placeholder="Search OB No, subject, narrative, reporting person, or officer..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900/90 pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:border-amber-500 focus:outline-hidden"
+            className="w-full rounded-md border border-zinc-800 bg-zinc-900/80 pl-9 pr-4 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:border-zinc-600 focus:outline-none font-mono"
           />
         </div>
 
-        {/* Category Filter */}
         <div className="sm:col-span-3">
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900/90 px-3 py-2 text-xs text-slate-300 focus:border-amber-500 focus:outline-hidden"
+            className="w-full rounded-md border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-200 focus:border-zinc-600 focus:outline-none font-mono"
           >
-            <option value="ALL">All Categories ({entries.length})</option>
+            <option value="ALL">All Categories</option>
             <option value="CRIMINAL">Criminal Offense</option>
             <option value="TRAFFIC">Traffic Incident</option>
             <option value="INCIDENT">General Incident</option>
@@ -175,223 +154,173 @@ export function DigitalOccurrenceBook({
             <option value="DIRECTIVE">Station Directive</option>
             <option value="PUBLIC_COMPLAINT">Public Complaint</option>
             <option value="LOST_PROPERTY">Lost Property</option>
-            <option value="OTHER">Administrative</option>
+            <option value="OTHER">Administrative / Other</option>
           </select>
         </div>
 
-        {/* Status Filter */}
         <div className="sm:col-span-3">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900/90 px-3 py-2 text-xs text-slate-300 focus:border-amber-500 focus:outline-hidden"
+            className="w-full rounded-md border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-200 focus:border-zinc-600 focus:outline-none font-mono"
           >
-            <option value="ALL">All Statuses</option>
-            <option value="OPEN">Open (Requires IO)</option>
-            <option value="ASSIGNED">Assigned</option>
+            <option value="ALL">All Statuses ({entries.length})</option>
+            <option value="OPEN">Open (Action Pending)</option>
+            <option value="ASSIGNED">Assigned to Investigator</option>
             <option value="UNDER_INVESTIGATION">Under Investigation</option>
-            <option value="AMENDED">Amended</option>
-            <option value="COURT_PENDING">Court Pending</option>
-            <option value="CLOSED">Closed / Resolved</option>
+            <option value="COURT_PENDING">Pending Court Plea</option>
+            <option value="AMENDED">Amended (Dual Sign-Off)</option>
+            <option value="CLOSED">Closed / Filed</option>
           </select>
         </div>
       </div>
 
-      {/* OB Entries Feed / Table */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-xs overflow-hidden">
-        {filteredEntries.length === 0 ? (
-          <div className="p-12 text-center space-y-3">
-            <FileText className="h-10 w-10 text-slate-600 mx-auto" />
-            <h3 className="text-sm font-semibold text-slate-300">No Occurrence Book records found</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              No matching incidents found for the active search and filter parameters.
-            </p>
-            <button
-              onClick={() => {
-                setSearchTerm('');
-                setCategoryFilter('ALL');
-                setStatusFilter('ALL');
-              }}
-              className="text-xs text-amber-400 hover:underline font-mono"
-            >
-              Reset Filters
-            </button>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-800">
-            {filteredEntries.map((entry) => {
-              const isExpanded = expandedEntryId === entry.id;
-              const catTheme = CATEGORY_COLORS[entry.category] || CATEGORY_COLORS.OTHER;
-              const statusTheme = STATUS_BADGES[entry.status] || STATUS_BADGES.OPEN;
+      {/* OB Entries Ledger Table */}
+      <div className="rounded-md border border-zinc-800/80 bg-zinc-950 overflow-hidden shadow-xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-zinc-900/80 border-b border-zinc-800 text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+              <tr>
+                <th className="px-4 py-3">OB Reference & Time</th>
+                <th className="px-4 py-3">Category</th>
+                <th className="px-4 py-3">Subject & Narrative</th>
+                <th className="px-4 py-3">Recording Officer</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800/60">
+              {filteredEntries.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-zinc-500 font-mono">
+                    <FileText className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                    No occurrence entries found matching your query.
+                  </td>
+                </tr>
+              ) : (
+                filteredEntries.map((entry) => {
+                  const isExpanded = expandedEntryId === entry.id;
 
-              return (
-                <div
-                  key={entry.id}
-                  className={`p-4 transition-colors ${
-                    isExpanded ? 'bg-slate-900/90' : 'hover:bg-slate-900/50'
-                  }`}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                    {/* OB Identifier & Title */}
-                    <div className="space-y-1.5 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded">
-                          OB {entry.ob_number}
-                        </span>
-
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${catTheme.bg} ${catTheme.text} ${catTheme.border}`}
-                        >
-                          {entry.category.replace('_', ' ')}
-                        </span>
-
-                        <span
-                          className={`text-[10px] font-medium px-2 py-0.5 rounded border font-mono ${statusTheme}`}
-                        >
-                          {entry.status.replace('_', ' ')}
-                        </span>
-
-                        {entry.is_amended && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-700">
-                            AMENDED
+                  return (
+                    <tr
+                      key={entry.id}
+                      className="hover:bg-zinc-900/40 transition group"
+                    >
+                      {/* Reference & Time */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="space-y-0.5">
+                          <span className="font-mono text-xs font-bold text-zinc-100 block">
+                            OB {entry.ob_number}
                           </span>
-                        )}
+                          <span className="font-mono text-[10px] text-zinc-500 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-zinc-500" />
+                            {new Date(entry.entry_timestamp).toLocaleTimeString('en-KE', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })} • {entry.incident_date}
+                          </span>
+                        </div>
+                      </td>
 
-                        <span className="text-xs text-slate-500 flex items-center gap-1 font-mono">
-                          <Clock className="h-3 w-3" />
-                          {new Date(entry.entry_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {entry.incident_date}
+                      {/* Category */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span className="font-mono text-[10px] text-zinc-300 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded">
+                          {entry.category}
                         </span>
-                      </div>
+                      </td>
 
-                      <h3 className="text-sm font-bold text-slate-200 hover:text-white transition-colors">
-                        {entry.subject}
-                      </h3>
-
-                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                        {entry.narrative}
-                      </p>
-                    </div>
-
-                    {/* Meta & Actions */}
-                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 shrink-0">
-                      <div className="text-right text-xs">
-                        <div className="text-slate-300 font-medium">{entry.recorded_by_name}</div>
-                        <div className="text-[10px] font-mono text-amber-400">{entry.recorded_by_service_no}</div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        {entry.category === 'CRIMINAL' && onNavigateToBookIn && (
-                          <button
-                            onClick={() => onNavigateToBookIn(entry)}
-                            className="flex items-center gap-1 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 px-2 py-1 text-[11px] font-semibold text-amber-300 transition-colors"
-                            title="Book in arrested suspect from this Occurrence Book record"
-                          >
-                            <UserPlus className="h-3 w-3" />
-                            <span>Book In</span>
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => setAmendingEntry(entry)}
-                          className="flex items-center gap-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-1 text-[11px] font-medium text-slate-300 transition-colors"
-                          title="File a linked append-only OB amendment notice"
-                        >
-                          <FileEdit className="h-3 w-3 text-purple-400" />
-                          <span>Amend</span>
-                        </button>
-
-                        <button
-                          onClick={() => setExpandedEntryId(isExpanded ? null : entry.id)}
-                          className="flex items-center gap-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-1 text-[11px] font-medium text-slate-300 transition-colors"
-                        >
-                          <span>Proof</span>
-                          {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Expanded Cryptographic Proof & Full Narrative */}
-                  {isExpanded && (
-                    <div className="mt-4 pt-4 border-t border-slate-800 space-y-3">
-                      <div>
-                        <div className="text-[11px] font-semibold uppercase text-slate-400 mb-1">
-                          Full Canonical Narrative
-                        </div>
-                        <div className="rounded-lg bg-slate-950 p-3.5 border border-slate-800 font-mono text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">
-                          {entry.narrative}
-                        </div>
-                      </div>
-
-                      {entry.reporting_person_name && (
-                        <div className="text-xs text-slate-400 flex items-center gap-3">
-                          <span className="flex items-center gap-1">
-                            <User className="h-3.5 w-3.5 text-slate-500" />
-                            <span>Reporting Party: <strong className="text-slate-200">{entry.reporting_person_name}</strong></span>
-                          </span>
-                          {entry.reporting_person_phone && (
-                            <span className="font-mono text-slate-500">
-                              Contact: {entry.reporting_person_phone}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Hash Chaining Details */}
-                      <div className="rounded-lg bg-slate-950/70 p-3 border border-slate-800 text-[11px] font-mono space-y-2">
-                        <div className="flex items-center justify-between text-slate-400">
-                          <span className="flex items-center gap-1.5 text-slate-400">
-                            <Lock className="h-3 w-3 text-amber-400" />
-                            <span>PREVIOUS BLOCK HASH:</span>
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-500 truncate max-w-[280px] sm:max-w-md">
-                              {entry.previous_entry_hash}
-                            </span>
+                      {/* Subject & Truncated Narrative */}
+                      <td className="px-4 py-3.5 max-w-md">
+                        <div className="space-y-1">
+                          <p className="font-semibold text-zinc-200 line-clamp-1">
+                            {entry.subject}
+                          </p>
+                          <p className={`text-zinc-400 font-mono text-[11px] leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}>
+                            {entry.narrative}
+                          </p>
+                          {entry.narrative.length > 120 && (
                             <button
-                              onClick={() => copyToClipboard(entry.previous_entry_hash)}
-                              className="text-slate-500 hover:text-slate-300"
-                              title="Copy Hash"
+                              onClick={() => setExpandedEntryId(isExpanded ? null : entry.id)}
+                              className="text-[10px] font-mono text-zinc-400 hover:text-zinc-200 flex items-center gap-0.5"
                             >
-                              {copiedHash === entry.previous_entry_hash ? (
-                                <Check className="h-3 w-3 text-emerald-400" />
+                              {isExpanded ? (
+                                <>Collapse details <ChevronUp className="w-3 h-3" /></>
                               ) : (
-                                <Copy className="h-3 w-3" />
+                                <>View full narrative <ChevronDown className="w-3 h-3" /></>
                               )}
                             </button>
-                          </div>
-                        </div>
+                          )}
 
-                        <div className="flex items-center justify-between text-emerald-400 border-t border-slate-800/80 pt-2">
-                          <span className="flex items-center gap-1.5">
-                            <ShieldCheck className="h-3 w-3 text-emerald-400" />
-                            <span>SEALED ENTRY HASH (SHA-256):</span>
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold truncate max-w-[280px] sm:max-w-md">
-                              {entry.entry_hash}
+                          {/* Cryptographic Hash Seal Preview */}
+                          <div className="pt-1 flex items-center gap-2 text-[10px] font-mono text-zinc-500">
+                            <Lock className="w-3 h-3 text-emerald-500 shrink-0" />
+                            <span className="truncate max-w-[200px]">
+                              {entry.entry_hash.slice(0, 16)}...
                             </span>
                             <button
                               onClick={() => copyToClipboard(entry.entry_hash)}
-                              className="text-slate-500 hover:text-slate-300"
-                              title="Copy Hash"
+                              className="text-zinc-500 hover:text-zinc-300"
+                              title="Copy SHA-256 block hash"
                             >
                               {copiedHash === entry.entry_hash ? (
-                                <Check className="h-3 w-3 text-emerald-400" />
+                                <Check className="w-3 h-3 text-emerald-400" />
                               ) : (
-                                <Copy className="h-3 w-3" />
+                                <Copy className="w-3 h-3" />
                               )}
                             </button>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+                      </td>
+
+                      {/* Recording Officer */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div>
+                          <p className="font-medium text-zinc-200">{entry.recorded_by_name}</p>
+                          <span className="font-mono text-[10px] text-zinc-500">
+                            {entry.recorded_by_service_no}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-300 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded w-fit">
+                          <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(entry.status)}`} />
+                          {entry.status.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {entry.category === 'CRIMINAL' && onNavigateToBookIn && (
+                            <button
+                              onClick={() => onNavigateToBookIn(entry)}
+                              className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded text-[11px] font-mono flex items-center gap-1 transition"
+                              title="Proceed to Person Book-In Desk"
+                            >
+                              <UserPlus className="w-3 h-3" />
+                              Book In
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => setAmendingEntry(entry)}
+                            className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 rounded text-[11px] font-mono flex items-center gap-1 transition"
+                            title="Propose Official Linked Amendment (Dual-Authorization Required)"
+                          >
+                            <FileEdit className="w-3 h-3" />
+                            Amend
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* New OB Entry Modal */}
@@ -401,14 +330,14 @@ export function DigitalOccurrenceBook({
           nextSeqNumber={nextSeq}
           previousEntryHash={lastHash}
           onClose={() => setIsNewEntryOpen(false)}
-          onSubmitEntry={(newOB) => {
-            onAddEntry(newOB);
+          onSubmitEntry={(newEntry) => {
+            onAddEntry(newEntry);
             setIsNewEntryOpen(false);
           }}
         />
       )}
 
-      {/* Linked OB Amendment Modal */}
+      {/* Official Linked Amendment Modal */}
       {amendingEntry && (
         <OBAmendmentModal
           entry={amendingEntry}

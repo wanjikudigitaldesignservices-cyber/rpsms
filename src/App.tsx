@@ -1,22 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Shield, 
-  Users, 
-  CheckSquare, 
-  FileText, 
-  Settings, 
-  KeyRound, 
-  ShieldCheck, 
-  Clock, 
-  UserPlus, 
-  LogOut, 
-  Database, 
-  BookOpen, 
-  Search,
-  Briefcase,
-  Package,
-  CreditCard,
-  Crosshair
+  UserPlus
 } from 'lucide-react';
 import type { 
   Officer, 
@@ -41,7 +25,8 @@ import type {
   ArmoryWeapon,
   PatrolVehicle,
   FuelLog,
-  CaseStatus
+  CaseStatus,
+  NavigationModule
 } from '@/types';
 import { OfficerList } from '@/components/admin/OfficerList';
 import { OfficerOnboardingModal } from '@/components/admin/OfficerOnboardingModal';
@@ -53,6 +38,7 @@ import { FirstRunSetup } from '@/components/admin/FirstRunSetup';
 import { MfaSetupModal } from '@/components/admin/MfaSetupModal';
 import { LoginPage } from '@/components/auth/LoginPage';
 import { RlsStatusModal } from '@/components/admin/RlsStatusModal';
+import { NeonStatusModal } from '@/components/admin/NeonStatusModal';
 
 // Phase 2 Components
 import { DigitalOccurrenceBook } from '@/components/ob/DigitalOccurrenceBook';
@@ -65,6 +51,14 @@ import { CaseManagement } from '@/components/cases/CaseManagement';
 import { EvidenceRegistry } from '@/components/evidence/EvidenceRegistry';
 import { CashlessBailCheckout } from '@/components/bail/CashlessBailCheckout';
 import { ArmoryAndVehicles } from '@/components/logistics/ArmoryAndVehicles';
+
+// Palantir UI & Sentinel AI Suite Components
+import { Sidebar } from '@/components/layout/Sidebar';
+import { TopHeader } from '@/components/layout/TopHeader';
+import { TerminalLockScreen } from '@/components/security/TerminalLockScreen';
+import { PIIRevealModal } from '@/components/security/PIIRevealModal';
+import { CommandCopilotModal } from '@/components/ai/CommandCopilotModal';
+import { SentinelAIGraph } from '@/components/ai/SentinelAIGraph';
 
 // Seed Data
 import { 
@@ -282,21 +276,22 @@ const INITIAL_APPROVALS: ApprovalRequest[] = [
 ];
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<
-    | 'OB_ENTRIES'
-    | 'CUSTODY'
-    | 'BOOK_IN'
-    | 'CASES'
-    | 'EVIDENCE'
-    | 'BAIL'
-    | 'LOGISTICS'
-    | 'OFFICERS'
-    | 'APPROVALS'
-    | 'AUDIT'
-    | 'ROLES'
-    | 'SETTINGS'
-    | 'SETUP'
-  >('OB_ENTRIES');
+  const [activeTab, setActiveTab] = useState<NavigationModule>('OB_ENTRIES');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isTerminalLocked, setIsTerminalLocked] = useState(false);
+  const [isCopilotOpen, setIsCopilotOpen] = useState(false);
+
+  // Justification-Gated PII Reveal State
+  const [piiModalConfig, setPiiModalConfig] = useState<{
+    isOpen: boolean;
+    targetField: string;
+    targetSubject: string;
+    onSuccess?: () => void;
+  }>({
+    isOpen: false,
+    targetField: '',
+    targetSubject: '',
+  });
 
   // Core Data State
   const [officers, setOfficers] = useState<Officer[]>(INITIAL_OFFICERS);
@@ -335,9 +330,10 @@ export function App() {
   const activeOfficer = officers.find((o) => o.id === activeOfficerId) || officers[0];
   const activeRole: RoleName = activeOfficer.role_name;
 
-  // Authentication & RLS session state
+  // Authentication & RLS & Neon session state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
   const [isRlsOpen, setIsRlsOpen] = useState<boolean>(false);
+  const [isNeonModalOpen, setIsNeonModalOpen] = useState<boolean>(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
   const [isMfaOpen, setIsMfaOpen] = useState<boolean>(false);
 
@@ -345,7 +341,7 @@ export function App() {
   const [secondsRemaining, setSecondsRemaining] = useState(15 * 60);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || isTerminalLocked) return;
     const timer = setInterval(() => {
       setSecondsRemaining((prev) => {
         if (prev <= 1) {
@@ -356,14 +352,18 @@ export function App() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isTerminalLocked]);
 
-  // Global Keyboard Shortcut: Ctrl+K or Cmd+K to open Forensic Search
+  // Global Hotkeys: Ctrl+K (Copilot) & Ctrl+L (Walk-Away Lock)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setIsSearchOpen((prev) => !prev);
+        setIsCopilotOpen((prev) => !prev);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        setIsTerminalLocked(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -371,6 +371,19 @@ export function App() {
   }, []);
 
   const resetSessionTimer = () => setSecondsRemaining(15 * 60);
+
+  // PII Unmasking Audit Handler (KDPA Sec 41 Compliance)
+  const handleConfirmPIIReveal = (reason: string, notes: string) => {
+    appendAuditLog(
+      'READ_SENSITIVE_PII',
+      `Officer unmasked protected PII for ${piiModalConfig.targetSubject} (${piiModalConfig.targetField}). Statutory purpose: ${reason}. Justification: ${notes}`,
+      'privacy_unmask_logs',
+      crypto.randomUUID()
+    );
+    if (piiModalConfig.onSuccess) {
+      piiModalConfig.onSuccess();
+    }
+  };
 
   const handleLoginSuccess = (officer: Officer) => {
     setActiveOfficerId(officer.id);
@@ -1186,501 +1199,301 @@ export function App() {
     return <LoginPage onLoginSuccess={handleLoginSuccess} availableOfficers={officers} />;
   }
 
-  const formatCountdown = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  const MODULE_NAMES: Record<NavigationModule, string> = {
+    OB_ENTRIES: 'Occurrence Book (OB)',
+    BOOK_IN: 'Detainee Book-In Desk',
+    CUSTODY: '24h Custody Sentinel',
+    CASES: 'CID Case Files & IO Allocation',
+    AI_GRAPH: 'Sentinel AI Cross-Case Graph',
+    EVIDENCE: 'Exhibits & Cryptographic Chain of Custody',
+    BAIL: 'Cashless Bail Desk',
+    LOGISTICS: 'Armory & Fleet Dispatch',
+    OFFICERS: 'Station Roster & Personnel',
+    APPROVALS: 'Four-Eyes Dual Control Inbox',
+    AUDIT: 'SHA-256 Immutable Audit Ledger',
+    ROLES: 'Role-Based Access Control (RBAC)',
+    SETTINGS: 'Station Parameters & Security Settings',
+    SETUP: 'First-Run Bootstrap System',
   };
 
-  const pendingApprovalsCount = approvals.filter((a) => a.status === 'PENDING').length;
   const activeInCustodyCount = custodyRecords.filter((c) => c.is_in_custody).length;
-  const armoryDiscrepancies = weapons.filter((w) => w.discrepancy_flagged).length;
+  const pendingApprovalsCount = approvals.filter((a) => a.status === 'PENDING').length;
+  const armoryDiscrepancies = weapons.filter(
+    (w) => w.discrepancy_flagged || (w.status === 'ISSUED' && !w.shift_end_reconciled)
+  ).length;
+  const vehiclesOnPatrol = vehicles.filter((v) => v.status === 'PATROL').length;
+  const custodyBreachRisk = custodyRecords.some((c) => {
+    if (!c.is_in_custody) return false;
+    const hours = (Date.now() - new Date(c.book_in_time).getTime()) / (1000 * 60 * 60);
+    return hours >= 20;
+  });
+
+  const sidebarCounts = {
+    ob: obEntries.length,
+    custody: activeInCustodyCount,
+    cases: cases.length,
+    exhibits: evidenceItems.length,
+    bail: bailRecords.length,
+    officers: officers.length,
+    approvals: pendingApprovalsCount,
+    armoryDeficits: armoryDiscrepancies,
+    vehiclesOnPatrol: vehiclesOnPatrol,
+    custodyBreachRisk: custodyBreachRisk,
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
-      {/* Top Institutional Header */}
-      <header className="border-b border-slate-800 bg-slate-900/95 sticky top-0 z-40 backdrop-blur-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-4">
-          {/* Station Identity & Crest */}
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <img
-                src="/crest.jpg"
-                alt="Rockport Police Crest"
-                className="h-10 w-10 rounded-full border border-amber-500/80 object-cover shadow-md"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-zinc-800 selection:text-white">
+      {/* Institutional Top Header */}
+      <TopHeader
+        activeOfficer={activeOfficer}
+        officers={officers}
+        onSwitchOfficer={(officerId) => {
+          setActiveOfficerId(officerId);
+          resetSessionTimer();
+        }}
+        secondsRemaining={secondsRemaining}
+        onResetTimer={resetSessionTimer}
+        onOpenCommandSearch={() => setIsCopilotOpen(true)}
+        onLockTerminal={() => setIsTerminalLocked(true)}
+        onOpenRlsModal={() => setIsRlsOpen(true)}
+        onOpenNeonModal={() => setIsNeonModalOpen(true)}
+        onLogout={handleLogout}
+        onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
+        activeModuleName={MODULE_NAMES[activeTab] || 'Station Command'}
+      />
+
+      {/* Main Container: Collapsible Sidebar + Content Viewport */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Palantir-Grade Left Command Sidebar */}
+        <Sidebar
+          activeTab={activeTab}
+          onTabChange={(tab) => {
+            setActiveTab(tab);
+            resetSessionTimer();
+          }}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+          counts={sidebarCounts}
+        />
+
+        {/* Tactical Content Viewport */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-zinc-950">
+          <div className="max-w-7xl mx-auto space-y-6">
+            {/* Module 1: Digital Occurrence Book */}
+            {activeTab === 'OB_ENTRIES' && (
+              <DigitalOccurrenceBook
+                entries={obEntries}
+                activeOfficer={activeOfficer}
+                onAddEntry={handleAddOBEntry}
+                onSubmitAmendment={handleSubmitOBAmendment}
+                onNavigateToBookIn={handleNavigateToBookInFromOB}
+              />
+            )}
+
+            {/* Module 2: Custody & 24h Clock */}
+            {activeTab === 'CUSTODY' && (
+              <CustodyManagement
+                custodyRecords={custodyRecords}
+                cells={cells}
+                propertyItems={propertyItems}
+                welfareLogs={welfareLogs}
+                activeOfficer={activeOfficer}
+                onNavigateToBookIn={() => setActiveTab('BOOK_IN')}
+                onCompleteExit={handleCompleteCustodyExit}
+                onAddPropertyItem={handleAddPropertyItem}
+                onReturnPropertyItem={handleReturnPropertyItem}
+                onAddWelfareLog={handleAddWelfareLog}
+              />
+            )}
+
+            {/* Module 3: Person Book-In Flow */}
+            {activeTab === 'BOOK_IN' && (
+              <PersonBookInFlow
+                activeOfficer={activeOfficer}
+                cells={cells}
+                obEntries={obEntries}
+                existingPersons={persons}
+                preselectedOBEntry={preselectedOBForBookIn}
+                onCancel={() => {
+                  setPreselectedOBForBookIn(null);
+                  setActiveTab('CUSTODY');
+                }}
+                onCompleteBookIn={handleCompleteBookIn}
+              />
+            )}
+
+            {/* Module 4: CID Case Management */}
+            {activeTab === 'CASES' && (
+              <CaseManagement
+                cases={cases}
+                notes={caseNotes}
+                obEntries={obEntries}
+                officers={officers}
+                activeOfficer={activeOfficer}
+                onCreateCase={handleCreateCase}
+                onAssignIO={handleAssignIO}
+                onAddNote={handleAddCaseNote}
+                onUpdateCaseStatus={handleUpdateCaseStatus}
+              />
+            )}
+
+            {/* Module 5: Sentinel AI Graph View */}
+            {activeTab === 'AI_GRAPH' && (
+              <SentinelAIGraph
+                cases={cases}
+                obEntries={obEntries}
+                currentOfficer={activeOfficer}
+                onNavigateToCase={(_caseId) => {
+                  setActiveTab('CASES');
                 }}
               />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm font-black tracking-wider text-slate-100 uppercase">
-                  Rockport Police Station
-                </h1>
-                <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 text-[10px] font-mono font-bold rounded">
-                  RPS-001
-                </span>
-                <span className="hidden sm:inline bg-emerald-950/80 text-emerald-400 border border-emerald-600/40 px-1.5 py-0.2 text-[10px] font-mono rounded">
-                  KENYA POLICE SERVICE
-                </span>
+            )}
+
+            {/* Module 6: Evidence Store & Cryptographic QR */}
+            {activeTab === 'EVIDENCE' && (
+              <EvidenceRegistry
+                evidenceItems={evidenceItems}
+                transfers={evidenceTransfers}
+                cases={cases}
+                activeOfficers={officers}
+                currentOfficer={activeOfficer}
+                onAddEvidence={handleAddEvidence}
+                onTransferEvidence={handleTransferEvidence}
+                onRequestDisposal={handleRequestDisposal}
+              />
+            )}
+
+            {/* Module 7: Cashless Bail Desk */}
+            {activeTab === 'BAIL' && (
+              <CashlessBailCheckout
+                bailRecords={bailRecords}
+                payments={payments}
+                custodyRecords={custodyRecords}
+                currentOfficer={activeOfficer}
+                onProcessPayment={handleProcessPayment}
+                onRequestWaiver={handleRequestBailWaiver}
+                onCreateBailRecord={handleCreateBailRecord}
+              />
+            )}
+
+            {/* Module 8: Armory & Patrol Fleet */}
+            {activeTab === 'LOGISTICS' && (
+              <ArmoryAndVehicles
+                weapons={weapons}
+                vehicles={vehicles}
+                fuelLogs={fuelLogs}
+                activeOfficers={officers}
+                currentOfficer={activeOfficer}
+                onIssueWeapon={handleIssueWeapon}
+                onReturnWeapon={handleReturnWeapon}
+                onLogFuel={handleLogFuel}
+                onUpdateVehicleStatus={handleUpdateVehicleStatus}
+              />
+            )}
+
+            {/* Module 9: Staff Directory */}
+            {activeTab === 'OFFICERS' && (
+              <div className="space-y-4">
+                {activeRole === 'OCS' && (
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => setIsOnboardingOpen(true)}
+                      className="flex items-center gap-2 rounded-md bg-zinc-100 hover:bg-white text-zinc-950 px-3.5 py-2 text-xs font-medium transition"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      <span>Onboard Officer</span>
+                    </button>
+                  </div>
+                )}
+                <OfficerList
+                  officers={officers}
+                  onSuspend={handleSuspendOfficer}
+                  onReactivate={handleReactivateOfficer}
+                  onRevokeSession={handleRevokeSession}
+                  onRequestRoleChange={handleRequestRoleChange}
+                  activeRole={activeRole}
+                />
               </div>
-              <p className="text-[11px] text-slate-400">
-                Occurrence Book Management & Anti-Corruption Security Core
-              </p>
-            </div>
+            )}
+
+            {/* Module 10: Four-Eyes Approvals */}
+            {activeTab === 'APPROVALS' && (
+              <ApprovalsInbox
+                approvals={approvals}
+                onApprove={handleApproveApproval}
+                onReject={handleRejectApproval}
+                activeOfficerId={activeOfficer.id}
+                activeRole={activeRole}
+              />
+            )}
+
+            {/* Module 11: Immutable Audit Log */}
+            {activeTab === 'AUDIT' && (
+              <LiveAuditLogViewer
+                auditLogs={auditLogs}
+                stationId={stationSettings.id}
+              />
+            )}
+
+            {/* Module 12: RBAC Matrix */}
+            {activeTab === 'ROLES' && <RolesPermissionsView />}
+
+            {/* Module 13: Station Settings */}
+            {activeTab === 'SETTINGS' && (
+              <StationSettings
+                settings={stationSettings}
+                onSave={handleSaveSettings}
+                activeRole={activeRole}
+              />
+            )}
+
+            {/* Module 14: First Run Bootstrap */}
+            {activeTab === 'SETUP' && (
+              <FirstRunSetup
+                isSetupComplete={isSetupComplete}
+                onCompleteSetup={handleCompleteSetup}
+              />
+            )}
           </div>
-
-          {/* Right Session Controls & Role Switcher */}
-          <div className="flex items-center gap-3">
-            {/* Quick Forensic Search Trigger */}
-            <button
-              onClick={() => setIsSearchOpen(true)}
-              className="flex items-center gap-2 rounded-lg bg-slate-950 hover:bg-slate-900 border border-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:text-white transition-colors"
-              title="Forensic Universal Search across all registers (Ctrl+K)"
-            >
-              <Search className="h-3.5 w-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Search Registers...</span>
-              <span className="font-mono text-[10px] text-slate-500 bg-slate-900 border border-slate-700 px-1 rounded">
-                Ctrl+K
-              </span>
-            </button>
-
-            {/* Live Session Timer */}
-            <div 
-              onClick={resetSessionTimer} 
-              title="Click to reset 15-minute activity timer"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 cursor-pointer hover:border-slate-700"
-            >
-              <Clock className="h-3.5 w-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Session: </span>
-              <strong className={secondsRemaining < 180 ? 'text-red-400' : 'text-emerald-400'}>
-                {formatCountdown(secondsRemaining)}
-              </strong>
-            </div>
-
-            {/* Active Officer Identity Badge */}
-            <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
-              <div className="text-right hidden sm:block">
-                <div className="text-xs font-semibold text-slate-200">{activeOfficer.full_name}</div>
-                <div className="text-[10px] font-mono text-amber-400 flex items-center justify-end gap-1">
-                  <span>{activeOfficer.service_number}</span>
-                  <span className="text-slate-500">•</span>
-                  <span>{activeOfficer.role_name}</span>
-                </div>
-              </div>
-
-              {/* Role Switcher for verification */}
-              <select
-                value={activeOfficerId}
-                onChange={(e) => {
-                  setActiveOfficerId(e.target.value);
-                  resetSessionTimer();
-                }}
-                title="Switch active logged-in officer profile (To verify RLS & permissions)"
-                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300 focus:border-amber-500 focus:outline-hidden"
-              >
-                {officers.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.role_name}: {o.full_name.split(' ')[0]} ({o.service_number})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* RLS Status Inspector Button */}
-            <button
-              onClick={() => setIsRlsOpen(true)}
-              className="flex items-center gap-1.5 rounded bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-600/50 px-2.5 py-1 text-xs font-semibold text-emerald-300 transition-colors"
-              title="Inspect PostgreSQL Row-Level Security Status across all 34 tables"
-            >
-              <Database className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="hidden md:inline">RLS Active (34/34)</span>
-            </button>
-
-            {/* MFA Setup Trigger */}
-            <button
-              onClick={() => setIsMfaOpen(true)}
-              className="rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 p-1.5 text-slate-300 hover:text-white transition-colors"
-              title="Configure Mandatory TOTP MFA"
-            >
-              <ShieldCheck className="h-4 w-4 text-emerald-400" />
-            </button>
-
-            {/* Sign Out Button */}
-            <button
-              onClick={handleLogout}
-              className="rounded bg-red-950/40 hover:bg-red-900/60 border border-red-800/60 p-1.5 text-red-400 hover:text-red-200 transition-colors"
-              title="Sign Out of Police Terminal Session"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-6">
-        {/* Navigation Tabs Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
-          <nav className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
-            {/* 1. Digital Occurrence Book (OB) */}
-            <button
-              onClick={() => setActiveTab('OB_ENTRIES')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                activeTab === 'OB_ENTRIES'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <BookOpen className="h-4 w-4" />
-              <span>Occurrence Book ({obEntries.length})</span>
-            </button>
-
-            {/* 2. Custody & 24h Clock */}
-            <button
-              onClick={() => setActiveTab('CUSTODY')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors relative ${
-                activeTab === 'CUSTODY'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <Clock className="h-4 w-4" />
-              <span>Custody & 24h Clock</span>
-              {activeInCustodyCount > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  activeTab === 'CUSTODY' ? 'bg-slate-950 text-amber-400 font-bold' : 'bg-red-500 text-white font-bold'
-                }`}>
-                  {activeInCustodyCount}
-                </span>
-              )}
-            </button>
-
-            {/* 3. Book-In Desk */}
-            <button
-              onClick={() => setActiveTab('BOOK_IN')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                activeTab === 'BOOK_IN'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <UserPlus className="h-4 w-4" />
-              <span>Book-In Desk</span>
-            </button>
-
-            {/* 4. CID Case Management */}
-            <button
-              onClick={() => setActiveTab('CASES')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                activeTab === 'CASES'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <Briefcase className="h-4 w-4" />
-              <span>Case Files ({cases.length})</span>
-            </button>
-
-            {/* 5. Exhibit Store & Cryptographic QR */}
-            <button
-              onClick={() => setActiveTab('EVIDENCE')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                activeTab === 'EVIDENCE'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <Package className="h-4 w-4" />
-              <span>Exhibits & QR ({evidenceItems.length})</span>
-            </button>
-
-            {/* 6. Cashless Bail Desk */}
-            <button
-              onClick={() => setActiveTab('BAIL')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                activeTab === 'BAIL'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <CreditCard className="h-4 w-4" />
-              <span>Cashless Bail ({bailRecords.length})</span>
-            </button>
-
-            {/* 7. Armory & Patrol Fleet */}
-            <button
-              onClick={() => setActiveTab('LOGISTICS')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors relative ${
-                activeTab === 'LOGISTICS'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <Crosshair className="h-4 w-4" />
-              <span>Armory & Fleet</span>
-              {armoryDiscrepancies > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-red-600 text-white font-bold animate-pulse">
-                  !
-                </span>
-              )}
-            </button>
-
-            {/* 8. Officers & Staff */}
-            <button
-              onClick={() => setActiveTab('OFFICERS')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                activeTab === 'OFFICERS'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <Users className="h-4 w-4" />
-              <span>Officers ({officers.length})</span>
-            </button>
-
-            {/* 9. Four-Eyes Approvals */}
-            <button
-              onClick={() => setActiveTab('APPROVALS')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors relative ${
-                activeTab === 'APPROVALS'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <CheckSquare className="h-4 w-4" />
-              <span>Four-Eyes Inbox</span>
-              {pendingApprovalsCount > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  activeTab === 'APPROVALS' ? 'bg-slate-950 text-amber-400 font-bold' : 'bg-amber-500 text-slate-950 font-bold'
-                }`}>
-                  {pendingApprovalsCount}
-                </span>
-              )}
-            </button>
-
-            {/* 10. Immutable Audit Log */}
-            <button
-              onClick={() => setActiveTab('AUDIT')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                activeTab === 'AUDIT'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <FileText className="h-4 w-4" />
-              <span>Audit Ledger</span>
-            </button>
-
-            {/* 11. RBAC Matrix */}
-            <button
-              onClick={() => setActiveTab('ROLES')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                activeTab === 'ROLES'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <Shield className="h-4 w-4" />
-              <span>RBAC</span>
-            </button>
-
-            {/* 12. Station Settings */}
-            <button
-              onClick={() => setActiveTab('SETTINGS')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                activeTab === 'SETTINGS'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <Settings className="h-4 w-4" />
-              <span>Settings</span>
-            </button>
-
-            {/* 13. First-Run Setup */}
-            <button
-              onClick={() => setActiveTab('SETUP')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                activeTab === 'SETUP'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'
-              }`}
-            >
-              <KeyRound className="h-4 w-4" />
-              <span>Bootstrap</span>
-            </button>
-          </nav>
-
-          {/* Contextual Action Button */}
-          {activeTab === 'OFFICERS' && activeRole === 'OCS' && (
-            <button
-              onClick={() => setIsOnboardingOpen(true)}
-              className="flex items-center gap-2 rounded bg-amber-500 hover:bg-amber-600 px-3.5 py-2 text-xs font-bold text-slate-950 transition-colors shadow-xs"
-            >
-              <UserPlus className="h-4 w-4" />
-              <span>Onboard Officer</span>
-            </button>
-          )}
-        </div>
-
-        {/* View Switcher based on Active Tab */}
-        <main>
-          {/* Module 1: Digital Occurrence Book */}
-          {activeTab === 'OB_ENTRIES' && (
-            <DigitalOccurrenceBook
-              entries={obEntries}
-              activeOfficer={activeOfficer}
-              onAddEntry={handleAddOBEntry}
-              onSubmitAmendment={handleSubmitOBAmendment}
-              onNavigateToBookIn={handleNavigateToBookInFromOB}
-            />
-          )}
-
-          {/* Module 2: Custody & 24h Clock */}
-          {activeTab === 'CUSTODY' && (
-            <CustodyManagement
-              custodyRecords={custodyRecords}
-              cells={cells}
-              propertyItems={propertyItems}
-              welfareLogs={welfareLogs}
-              activeOfficer={activeOfficer}
-              onNavigateToBookIn={() => setActiveTab('BOOK_IN')}
-              onCompleteExit={handleCompleteCustodyExit}
-              onAddPropertyItem={handleAddPropertyItem}
-              onReturnPropertyItem={handleReturnPropertyItem}
-              onAddWelfareLog={handleAddWelfareLog}
-            />
-          )}
-
-          {/* Module 3: Person Book-In Flow */}
-          {activeTab === 'BOOK_IN' && (
-            <PersonBookInFlow
-              activeOfficer={activeOfficer}
-              cells={cells}
-              obEntries={obEntries}
-              existingPersons={persons}
-              preselectedOBEntry={preselectedOBForBookIn}
-              onCancel={() => {
-                setPreselectedOBForBookIn(null);
-                setActiveTab('CUSTODY');
-              }}
-              onCompleteBookIn={handleCompleteBookIn}
-            />
-          )}
-
-          {/* Module 4: CID Case Management */}
-          {activeTab === 'CASES' && (
-            <CaseManagement
-              cases={cases}
-              notes={caseNotes}
-              obEntries={obEntries}
-              officers={officers}
-              activeOfficer={activeOfficer}
-              onCreateCase={handleCreateCase}
-              onAssignIO={handleAssignIO}
-              onAddNote={handleAddCaseNote}
-              onUpdateCaseStatus={handleUpdateCaseStatus}
-            />
-          )}
-
-          {/* Module 5: Evidence Store & Cryptographic QR */}
-          {activeTab === 'EVIDENCE' && (
-            <EvidenceRegistry
-              evidenceItems={evidenceItems}
-              transfers={evidenceTransfers}
-              cases={cases}
-              activeOfficers={officers}
-              currentOfficer={activeOfficer}
-              onAddEvidence={handleAddEvidence}
-              onTransferEvidence={handleTransferEvidence}
-              onRequestDisposal={handleRequestDisposal}
-            />
-          )}
-
-          {/* Module 6: Cashless Bail Desk */}
-          {activeTab === 'BAIL' && (
-            <CashlessBailCheckout
-              bailRecords={bailRecords}
-              payments={payments}
-              custodyRecords={custodyRecords}
-              currentOfficer={activeOfficer}
-              onProcessPayment={handleProcessPayment}
-              onRequestWaiver={handleRequestBailWaiver}
-              onCreateBailRecord={handleCreateBailRecord}
-            />
-          )}
-
-          {/* Module 7: Armory & Patrol Fleet */}
-          {activeTab === 'LOGISTICS' && (
-            <ArmoryAndVehicles
-              weapons={weapons}
-              vehicles={vehicles}
-              fuelLogs={fuelLogs}
-              activeOfficers={officers}
-              currentOfficer={activeOfficer}
-              onIssueWeapon={handleIssueWeapon}
-              onReturnWeapon={handleReturnWeapon}
-              onLogFuel={handleLogFuel}
-              onUpdateVehicleStatus={handleUpdateVehicleStatus}
-            />
-          )}
-
-          {/* Staff Directory */}
-          {activeTab === 'OFFICERS' && (
-            <OfficerList
-              officers={officers}
-              onSuspend={handleSuspendOfficer}
-              onReactivate={handleReactivateOfficer}
-              onRevokeSession={handleRevokeSession}
-              onRequestRoleChange={handleRequestRoleChange}
-              activeRole={activeRole}
-            />
-          )}
-
-          {/* Four-Eyes Approvals */}
-          {activeTab === 'APPROVALS' && (
-            <ApprovalsInbox
-              approvals={approvals}
-              onApprove={handleApproveApproval}
-              onReject={handleRejectApproval}
-              activeOfficerId={activeOfficer.id}
-              activeRole={activeRole}
-            />
-          )}
-
-          {/* Immutable Audit Log */}
-          {activeTab === 'AUDIT' && (
-            <LiveAuditLogViewer
-              auditLogs={auditLogs}
-              stationId={stationSettings.id}
-            />
-          )}
-
-          {/* RBAC Matrix */}
-          {activeTab === 'ROLES' && <RolesPermissionsView />}
-
-          {/* Station Settings */}
-          {activeTab === 'SETTINGS' && (
-            <StationSettings
-              settings={stationSettings}
-              onSave={handleSaveSettings}
-              activeRole={activeRole}
-            />
-          )}
-
-          {/* First Run Bootstrap */}
-          {activeTab === 'SETUP' && (
-            <FirstRunSetup
-              isSetupComplete={isSetupComplete}
-              onCompleteSetup={handleCompleteSetup}
-            />
-          )}
         </main>
       </div>
 
-      {/* Global Forensic Search Modal */}
+      {/* Global Modals */}
+      <CommandCopilotModal
+        isOpen={isCopilotOpen}
+        onClose={() => setIsCopilotOpen(false)}
+        obEntries={obEntries}
+        cases={cases}
+        custodyRecords={custodyRecords}
+        officers={officers}
+        approvals={approvals}
+        weapons={weapons}
+        currentOfficer={activeOfficer}
+        onNavigate={(mod) => {
+          setActiveTab(mod as NavigationModule);
+          setIsCopilotOpen(false);
+        }}
+      />
+
+      <TerminalLockScreen
+        isLocked={isTerminalLocked}
+        activeOfficer={activeOfficer}
+        onUnlock={() => {
+          setIsTerminalLocked(false);
+          resetSessionTimer();
+        }}
+        onLogout={handleLogout}
+      />
+
+      <PIIRevealModal
+        isOpen={piiModalConfig.isOpen}
+        onClose={() => setPiiModalConfig((prev) => ({ ...prev, isOpen: false }))}
+        targetField={piiModalConfig.targetField}
+        targetSubject={piiModalConfig.targetSubject}
+        currentOfficer={activeOfficer}
+        onConfirmReveal={handleConfirmPIIReveal}
+      />
+
       <GlobalForensicSearch
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
@@ -1698,7 +1511,6 @@ export function App() {
         onLogAuditSearch={handleLogAuditSearch}
       />
 
-      {/* Onboarding Modal */}
       <OfficerOnboardingModal
         isOpen={isOnboardingOpen}
         onClose={() => setIsOnboardingOpen(false)}
@@ -1706,7 +1518,6 @@ export function App() {
         stationId={stationSettings.id}
       />
 
-      {/* MFA Modal */}
       <MfaSetupModal
         isOpen={isMfaOpen}
         onClose={() => setIsMfaOpen(false)}
@@ -1724,12 +1535,16 @@ export function App() {
         serviceNumber={activeOfficer.service_number}
       />
 
-      {/* RLS Inspector Modal */}
       <RlsStatusModal
         isOpen={isRlsOpen}
         onClose={() => setIsRlsOpen(false)}
         activeRole={activeRole}
         activeServiceNumber={activeOfficer.service_number}
+      />
+
+      <NeonStatusModal
+        isOpen={isNeonModalOpen}
+        onClose={() => setIsNeonModalOpen(false)}
       />
     </div>
   );

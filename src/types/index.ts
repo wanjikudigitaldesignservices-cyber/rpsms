@@ -513,3 +513,72 @@ export interface FuelLog {
   consumption_anomaly_flagged: boolean;
   logged_at: string;
 }
+
+/* =========================================================================
+   SENTINEL AI & PALANTIR-STYLE LINK INTELLIGENCE TYPES
+   ========================================================================= */
+
+export type NavigationModule =
+  | 'OB_ENTRIES'
+  | 'BOOK_IN'
+  | 'CUSTODY'
+  | 'CASES'
+  | 'AI_GRAPH'
+  | 'EVIDENCE'
+  | 'BAIL'
+  | 'LOGISTICS'
+  | 'OFFICERS'
+  | 'APPROVALS'
+  | 'AUDIT'
+  | 'ROLES'
+  | 'SETTINGS'
+  | 'SETUP';
+
+export interface EntityLinkNode {
+  id: string;
+  label: string;
+  type: 'SUSPECT' | 'CASE' | 'PHONE' | 'VEHICLE' | 'EXHIBIT' | 'LOCATION';
+  metadata: Record<string, string>;
+  riskLevel?: 'CRITICAL' | 'ELEVATED' | 'NOMINAL';
+}
+
+export interface EntityLinkEdge {
+  id: string;
+  source: string;
+  target: string;
+  relationship: string;
+  confidence: number;
+}
+
+export interface SyndicateCluster {
+  id: string;
+  syndicateName: string;
+  modusOperandi: string;
+  primaryArea: string;
+  casesCount: number;
+  linkedSuspectsCount: number;
+  confidenceScore: number;
+  threatLevel: 'TIER_1_CRITICAL' | 'TIER_2_ELEVATED' | 'MONITORED';
+  nodes: EntityLinkNode[];
+  edges: EntityLinkEdge[];
+}
+
+export interface StatutoryRecommendation {
+  penalSection: string;
+  offenseTitle: string;
+  statute: string;
+  confidence: number;
+  rationale: string;
+}
+
+export interface OCSHandoverBrief {
+  generatedAt: string;
+  generatingOfficerServiceNo: string;
+  totalOBEntries12h: number;
+  detaineesUnder24hRisk: number;
+  pendingFourEyesApprovals: number;
+  armoryDeficitsCount: number;
+  auditChainIntegrity: '100% VERIFIED' | 'TAMPER_ALERT';
+  summaryNarrative: string;
+  actionItems: string[];
+}

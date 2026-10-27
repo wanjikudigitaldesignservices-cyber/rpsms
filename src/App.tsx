@@ -325,13 +325,15 @@ export function App() {
   // Global Forensic Search state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  // Active session state (Default OCS)
-  const [activeOfficerId, setActiveOfficerId] = useState<string>('00000000-0000-0000-0000-000000000001');
+  // Active session state (Deny by default)
+  const [activeOfficerId, setActiveOfficerId] = useState<string>('');
   const activeOfficer = officers.find((o) => o.id === activeOfficerId) || officers[0];
-  const activeRole: RoleName = activeOfficer.role_name;
+  const activeRole: RoleName = activeOfficer?.role_name || 'DUTY_OFFICER_OB_CLERK';
 
   // Authentication & RLS & Neon session state
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
+  const [, setCsrfToken] = useState<string>('');
   const [isRlsOpen, setIsRlsOpen] = useState<boolean>(false);
   const [isNeonModalOpen, setIsNeonModalOpen] = useState<boolean>(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
@@ -339,6 +341,44 @@ export function App() {
 
   // Live session timeout countdown (15 min)
   const [secondsRemaining, setSecondsRemaining] = useState(15 * 60);
+
+  const resetSessionTimer = () => setSecondsRemaining(15 * 60);
+
+  // Check active server session on mount (GET /api/auth/me)
+  useEffect(() => {
+    let isMounted = true;
+    async function verifySession() {
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data.user) {
+            setActiveOfficerId(data.user.id);
+            setCsrfToken(data.csrfToken || '');
+            setIsAuthenticated(true);
+            resetSessionTimer();
+          }
+        } else {
+          if (isMounted) {
+            setIsAuthenticated(false);
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setIsAuthenticated(false);
+        }
+      } finally {
+        if (isMounted) {
+          setIsAuthChecking(false);
+        }
+      }
+    }
+    verifySession();
+    return () => { isMounted = false; };
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated || isTerminalLocked) return;
@@ -370,8 +410,6 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const resetSessionTimer = () => setSecondsRemaining(15 * 60);
-
   // PII Unmasking Audit Handler (KDPA Sec 41 Compliance)
   const handleConfirmPIIReveal = (reason: string, notes: string) => {
     appendAuditLog(
@@ -385,8 +423,9 @@ export function App() {
     }
   };
 
-  const handleLoginSuccess = (officer: Officer) => {
+  const handleLoginSuccess = (officer: Officer, token: string) => {
     setActiveOfficerId(officer.id);
+    setCsrfToken(token);
     setIsAuthenticated(true);
     resetSessionTimer();
     appendAuditLog(
@@ -397,7 +436,16 @@ export function App() {
     );
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include'
+      });
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
     appendAuditLog(
       'OFFICER_LOGGED_OUT',
       `Officer ${activeOfficer.full_name} (${activeOfficer.service_number}) terminated terminal session.`,
@@ -405,6 +453,8 @@ export function App() {
       activeOfficer.id
     );
     setIsAuthenticated(false);
+    setActiveOfficerId('');
+    setCsrfToken('');
   };
 
   // Helper to chain a new audit log record
@@ -1194,6 +1244,20 @@ export function App() {
     }
     return false;
   };
+
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-slate-300 font-mono text-xs">
+        <div className="w-10 h-10 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mb-4" />
+        <div className="text-slate-100 font-bold uppercase tracking-widest text-[11px]">
+          Verifying Station Security Session...
+        </div>
+        <div className="text-slate-500 text-[10px] mt-1">
+          Zero-Trust Server Gate Active • Kenya Police Service
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <LoginPage onLoginSuccess={handleLoginSuccess} availableOfficers={officers} />;

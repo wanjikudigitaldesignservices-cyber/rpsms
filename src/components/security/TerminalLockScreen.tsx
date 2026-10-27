@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, AlertTriangle } from 'lucide-react';
+import { Lock, AlertTriangle, Loader2 } from 'lucide-react';
 import type { Officer } from '../../types';
 
 interface TerminalLockScreenProps {
@@ -15,20 +15,45 @@ export const TerminalLockScreen: React.FC<TerminalLockScreenProps> = ({
   onUnlock,
   onLogout,
 }) => {
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   if (!isLocked) return null;
 
-  const handleUnlock = (e: React.FormEvent) => {
+  const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Default PIN 1234 or service number suffix
-    if (pin === '1234' || pin === '123456' || pin === activeOfficer.service_number) {
-      setError(null);
-      setPin('');
-      onUnlock();
-    } else {
-      setError('Invalid security PIN. Access attempt recorded.');
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      // Re-verify credentials against server endpoint
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          serviceNumber: activeOfficer.service_number,
+          password: password
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && (data.user || data.status === 'TOTP_REQUIRED')) {
+        setPassword('');
+        setError(null);
+        onUnlock();
+      } else {
+        setError(data.error || 'Invalid officer credentials. Access attempt logged.');
+      }
+    } catch {
+      setError('Terminal verification failed. Try again or logout.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -61,40 +86,37 @@ export const TerminalLockScreen: React.FC<TerminalLockScreenProps> = ({
           )}
 
           <div>
-            <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider mb-1.5">
-              Enter Quick PIN (Default: 1234)
+            <label className="block text-[11px] font-medium text-zinc-400 mb-1">
+              Enter Password to Resume
             </label>
             <input
               type="password"
+              required
               autoFocus
-              maxLength={8}
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              placeholder="••••"
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-sm text-center tracking-widest font-mono text-zinc-100 focus:outline-none focus:border-zinc-600"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Officer password"
+              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-750 rounded-md text-xs text-zinc-100 placeholder-zinc-600 focus:outline-hidden focus:border-zinc-500"
             />
           </div>
 
-          <div className="space-y-2 pt-1">
-            <button
-              type="submit"
-              className="w-full py-2 bg-zinc-100 hover:bg-white text-zinc-950 font-medium text-xs rounded-md transition shadow"
-            >
-              Resume Terminal Session
-            </button>
+          <div className="flex gap-2">
             <button
               type="button"
               onClick={onLogout}
-              className="w-full py-1.5 text-zinc-500 hover:text-zinc-300 text-xs transition"
+              className="w-1/2 py-2 border border-zinc-800 text-zinc-400 text-xs rounded-md hover:bg-zinc-900 transition-colors"
             >
-              Sign out completely
+              Sign Out
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-1/2 py-2 bg-zinc-100 text-zinc-950 font-semibold text-xs rounded-md hover:bg-zinc-200 transition-colors flex items-center justify-center gap-1.5"
+            >
+              {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>Unlock</span>}
             </button>
           </div>
         </form>
-
-        <div className="pt-2 border-t border-zinc-900 text-[10px] text-zinc-600 font-mono">
-          STATION AUDIT ACTIVE • ALL FAILED UNLOCKS LOGGED
-        </div>
       </div>
     </div>
   );

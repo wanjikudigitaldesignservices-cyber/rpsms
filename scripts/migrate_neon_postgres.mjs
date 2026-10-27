@@ -25,18 +25,52 @@ async function migrate() {
 
   console.log('Connected to Neon PostgreSQL successfully!');
 
+  // Ensure schema_migrations table exists
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  // Check if initial 5 migrations are recorded; if not, mark them applied since tables exist
+  const existingMigrations = await client.query('SELECT version FROM schema_migrations;');
+  const appliedSet = new Set(existingMigrations.rows.map(r => r.version));
+
+  // If table check shows core tables already exist, mark initial migrations as applied
+  const tablesCheck = await client.query("SELECT 1 FROM information_schema.tables WHERE table_name = 'officers';");
+  if (tablesCheck.rows.length > 0 && !appliedSet.has('20261027000001_core_schema.sql')) {
+    const priorMigrations = [
+      '20261027000001_core_schema.sql',
+      '20261027000002_audit_and_triggers.sql',
+      '20261027000003_rbac_and_rls.sql',
+      '20261027000004_seed_roles_and_station.sql',
+      '20261027000005_seed_test_officers.sql'
+    ];
+    for (const m of priorMigrations) {
+      await client.query('INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING;', [m]);
+      appliedSet.add(m);
+    }
+  }
+
   const migrationsDir = path.resolve(__dirname, '../supabase/migrations');
   const files = fs.readdirSync(migrationsDir)
     .filter(f => f.endsWith('.sql'))
     .sort();
 
-  console.log(`Applying ${files.length} migrations to Neon PostgreSQL...`);
+  console.log(`Checking ${files.length} migrations...`);
 
   for (const file of files) {
+    if (appliedSet.has(file)) {
+      console.log(`  -> Skipping ${file} (already applied)`);
+      continue;
+    }
+
     process.stdout.write(`  -> Applying ${file}... `);
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
     try {
       await client.query(sql);
+      await client.query('INSERT INTO schema_migrations (version) VALUES ($1);', [file]);
       console.log('DONE');
     } catch (err) {
       console.error(`FAILED: ${err.message}`);
@@ -60,9 +94,6 @@ async function migrate() {
 
   const roles = await client.query('SELECT count(*)::text as count FROM roles;');
   console.log(`Roles seeded in Neon: ${roles.rows[0].count}`);
-
-  const station = await client.query('SELECT code, name FROM stations LIMIT 1;');
-  console.log('Station in Neon:', station.rows[0]);
 
   await client.end();
   console.log('\n=== Neon PostgreSQL Migration Succeeded 100% ===');

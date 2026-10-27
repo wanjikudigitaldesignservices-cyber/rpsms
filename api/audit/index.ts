@@ -1,8 +1,16 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { getDb } from '../_lib/db.js';
 import { requireAuth } from '../_lib/auth.js';
+import { verifyChainHandler } from '../_lib/audit-verify.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
+  const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+  const action = ((req as any).query?.action as string) || url.searchParams.get('action') || '';
+
+  if (action === 'verify-chain' || url.pathname.includes('/verify-chain')) {
+    return verifyChainHandler(req, res);
+  }
+
   // OCS and AUDITOR ONLY!
   const user = await requireAuth(req, res, ['OCS', 'AUDITOR', 'ADMIN_SUPER_OWNER']);
   if (!user) return;
@@ -14,9 +22,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
-  const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
   const officerFilter = url.searchParams.get('officer');
-  const actionFilter = url.searchParams.get('action');
+  const actionFilter = url.searchParams.get('action_type');
   const limit = Math.min(Number(url.searchParams.get('limit') || 100), 500);
 
   const sql = getDb();

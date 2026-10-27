@@ -23,7 +23,7 @@ if (!process.env.DATABASE_URL && process.env.DATABASE_URL_UNPOOLED) {
   process.env.DATABASE_URL = process.env.DATABASE_URL_UNPOOLED;
 }
 
-const { default: loginHandler } = await import('../api/auth/login.ts');
+const { default: loginHandler } = await import('../api/_lib/auth-routes/login.js');
 const { default: auditHandler } = await import('../api/audit/index.ts');
 const { default: healthHandler } = await import('../api/system/health.ts');
 

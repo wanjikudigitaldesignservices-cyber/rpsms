@@ -1,11 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { getDb } from '../_lib/db.js';
-import { logAuditEvent } from '../_lib/audit.js';
-import { requireAuth, parseJsonBody, getClientIp } from '../_lib/auth.js';
+import { getDb } from '../db.js';
+import { logAuditEvent } from '../audit.js';
+import { requireAuth, parseJsonBody, getClientIp } from '../auth.js';
 
-import { validatePasswordPolicy } from '../_lib/password.js';
+import { validatePasswordPolicy } from '../password.js';
 
 const ChangePasswordSchema = z.object({
   currentPassword: z.string().min(1),

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { getDb } from '../_lib/db.js';
-import { logAuditEvent } from '../_lib/audit.js';
-import { setSecurityHeaders, SESSION_COOKIE_NAME, getClientIp, parseCookies, serializeCookie } from '../_lib/auth.js';
+import { getDb } from '../db.js';
+import { logAuditEvent } from '../audit.js';
+import { setSecurityHeaders, SESSION_COOKIE_NAME, getClientIp, parseCookies, serializeCookie } from '../auth.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   setSecurityHeaders(req, res);

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { requireAuth, getClientIp } from '../_lib/auth.js';
-import { getDb } from '../_lib/db.js';
-import { logAuditEvent } from '../_lib/audit.js';
+import { requireAuth, getClientIp } from '../auth.js';
+import { getDb } from '../db.js';
+import { logAuditEvent } from '../audit.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== 'POST') {

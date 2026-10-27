@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { requireAuth, getClientIp, parseJsonBody } from '../_lib/auth.js';
-import { getDb } from '../_lib/db.js';
-import { logAuditEvent } from '../_lib/audit.js';
+import { requireAuth, getClientIp, parseJsonBody } from '../auth.js';
+import { getDb } from '../db.js';
+import { logAuditEvent } from '../audit.js';
 
 const UnlockSchema = z.object({
   password: z.string().min(1).max(256)

@@ -23,7 +23,7 @@ if (!process.env.DATABASE_URL && process.env.DATABASE_URL_UNPOOLED) {
 }
 
 const { setSecurityHeaders } = await import('../api/_lib/auth.ts');
-const { default: loginHandler } = await import('../api/auth/login.ts');
+const { default: loginHandler } = await import('../api/_lib/auth-routes/login.js');
 
 async function testHeadersAndErrors() {
   console.log('=== VERIFYING RESPONSE HEADERS & HYGIENE ===\n');

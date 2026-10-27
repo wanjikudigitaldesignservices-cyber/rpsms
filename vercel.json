@@ -40,6 +40,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/audit/verify-chain",
+      "destination": "/api/audit?action=verify-chain"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

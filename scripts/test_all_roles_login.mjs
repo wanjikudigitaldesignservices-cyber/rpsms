@@ -23,7 +23,7 @@ if (!process.env.DATABASE_URL && process.env.DATABASE_URL_UNPOOLED) {
   process.env.DATABASE_URL = process.env.DATABASE_URL_UNPOOLED;
 }
 
-const { default: handler } = await import('../api/auth/login.ts');
+const { default: handler } = await import('../api/_lib/auth-routes/login.js');
 
 const TEST_ROLES = [
   { role: 'OCS', serviceNumber: 'KPS-238914', password: 'Station@2026!', totp: '123456' },

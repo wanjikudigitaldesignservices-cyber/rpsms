@@ -3,8 +3,8 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import * as OTPAuth from 'otpauth';
 import { z } from 'zod';
-import { getDb } from '../_lib/db.js';
-import { logAuditEvent } from '../_lib/audit.js';
+import { getDb } from '../db.js';
+import { logAuditEvent } from '../audit.js';
 import { 
   setSecurityHeaders, 
   getClientIp, 
@@ -13,7 +13,7 @@ import {
   ABSOLUTE_TIMEOUT_HOURS,
   parseJsonBody,
   serializeCookie
-} from '../_lib/auth.js';
+} from '../auth.js';
 
 const LoginSchema = z.object({
   serviceNumber: z.string().min(3).max(64),

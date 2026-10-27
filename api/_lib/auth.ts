@@ -257,7 +257,7 @@ export async function requireAuth(
     if (!allowedRoles.includes(session.role_id)) {
       res.statusCode = 403;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ error: `Forbidden: Access requires one of [${allowedRoles.join(', ')}] role` }));
+      res.end(JSON.stringify({ error: 'Forbidden: Insufficient permissions' }));
       return null;
     }
   }

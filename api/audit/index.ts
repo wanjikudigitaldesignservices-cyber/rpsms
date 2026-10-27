@@ -22,28 +22,40 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   const sql = getDb();
 
   try {
-    const logs = await sql`
-      SELECT 
-        a.id,
-        a.seq_number,
-        a.action_type,
-        a.table_name,
-        a.record_id,
-        a.actor_id,
-        a.actor_service_number,
-        a.actor_role,
-        a.ip_address,
-        a.justification,
-        a.previous_log_hash,
-        a.log_hash,
-        a.recorded_at
-      FROM audit_log a
-      WHERE 
-        (${officerFilter || null} IS NULL OR a.actor_service_number = ${officerFilter} OR a.actor_id::text = ${officerFilter})
-        AND (${actionFilter || null} IS NULL OR a.action_type = ${actionFilter})
-      ORDER BY a.seq_number DESC
-      LIMIT ${limit};
-    `;
+    let logs;
+    if (officerFilter && actionFilter) {
+      logs = await sql`
+        SELECT a.id, a.seq_number, a.action_type, a.table_name, a.record_id, a.actor_id, a.actor_service_number, a.actor_role, a.ip_address, a.justification, a.previous_log_hash, a.log_hash, a.recorded_at
+        FROM audit_log a
+        WHERE (a.actor_service_number = ${officerFilter} OR a.actor_id::text = ${officerFilter})
+          AND a.action_type = ${actionFilter}
+        ORDER BY a.seq_number DESC
+        LIMIT ${limit};
+      `;
+    } else if (officerFilter) {
+      logs = await sql`
+        SELECT a.id, a.seq_number, a.action_type, a.table_name, a.record_id, a.actor_id, a.actor_service_number, a.actor_role, a.ip_address, a.justification, a.previous_log_hash, a.log_hash, a.recorded_at
+        FROM audit_log a
+        WHERE (a.actor_service_number = ${officerFilter} OR a.actor_id::text = ${officerFilter})
+        ORDER BY a.seq_number DESC
+        LIMIT ${limit};
+      `;
+    } else if (actionFilter) {
+      logs = await sql`
+        SELECT a.id, a.seq_number, a.action_type, a.table_name, a.record_id, a.actor_id, a.actor_service_number, a.actor_role, a.ip_address, a.justification, a.previous_log_hash, a.log_hash, a.recorded_at
+        FROM audit_log a
+        WHERE a.action_type = ${actionFilter}
+        ORDER BY a.seq_number DESC
+        LIMIT ${limit};
+      `;
+    } else {
+      logs = await sql`
+        SELECT a.id, a.seq_number, a.action_type, a.table_name, a.record_id, a.actor_id, a.actor_service_number, a.actor_role, a.ip_address, a.justification, a.previous_log_hash, a.log_hash, a.recorded_at
+        FROM audit_log a
+        ORDER BY a.seq_number DESC
+        LIMIT ${limit};
+      `;
+    }
 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');

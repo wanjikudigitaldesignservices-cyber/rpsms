@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Shield, 
   Lock, 
@@ -171,7 +171,44 @@ const ROLE_PRESETS: RolePreset[] = [
   }
 ];
 
+interface BackgroundScene {
+  id: string;
+  url: string;
+  label: string;
+  title: string;
+  subtitle: string;
+  theme: string;
+}
+
+const BACKGROUND_SCENES: BackgroundScene[] = [
+  {
+    id: 'patrol',
+    url: '/bg-police-patrol.jpg',
+    label: 'Crime Prevention Patrol',
+    title: 'Active Crime Fighting & Night Patrol',
+    subtitle: 'Rapid Tactical Response • 24/7 Citizen Protection',
+    theme: 'border-blue-500/40 text-blue-300'
+  },
+  {
+    id: 'community',
+    url: '/bg-police-community.jpg',
+    label: 'Community Initiatives',
+    title: 'Police-Led Community Initiatives',
+    subtitle: 'Building Trust with Youth & Elders • Partnership in Safety',
+    theme: 'border-emerald-500/40 text-emerald-300'
+  },
+  {
+    id: 'forensics',
+    url: '/bg-police-forensics.jpg',
+    label: 'DCI Crime Investigation',
+    title: 'DCI Criminal Investigations & Forensics',
+    subtitle: 'Scientific Evidence Gathering • Chain of Custody Integrity',
+    theme: 'border-amber-500/40 text-amber-300'
+  }
+];
+
 export const LoginPage: React.FC<Props> = ({ onLoginSuccess, availableOfficers = [] }) => {
+  const [activeBgIndex, setActiveBgIndex] = useState(0);
   const [selectedRole, setSelectedRole] = useState<RolePreset>(ROLE_PRESETS[0]);
   const [step, setStep] = useState<'CREDENTIALS' | 'MFA'>('CREDENTIALS');
   const [serviceNumber, setServiceNumber] = useState(ROLE_PRESETS[0].serviceNumber);
@@ -182,6 +219,14 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess, availableOfficers =
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Background Slideshow Interval (auto-cycles every 8 seconds)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveBgIndex((prev) => (prev + 1) % BACKGROUND_SCENES.length);
+    }, 8000);
+    return () => clearInterval(timer);
+  }, []);
 
   const applyRolePreset = (preset: RolePreset, autoSubmit: boolean = false) => {
     setSelectedRole(preset);
@@ -273,8 +318,25 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess, availableOfficers =
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4 selection:bg-amber-500 selection:text-slate-950">
-      <div className="w-full max-w-xl space-y-5">
+    <div className="relative min-h-screen bg-slate-950 flex flex-col justify-between items-center p-4 selection:bg-amber-500 selection:text-slate-950 overflow-x-hidden">
+      {/* Background Slideshow Layer showcasing Crime Fighting & Community Initiatives */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        {BACKGROUND_SCENES.map((scene, idx) => (
+          <div
+            key={scene.id}
+            className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out ${
+              idx === activeBgIndex ? 'opacity-40 scale-100' : 'opacity-0 scale-105'
+            } transform transition-transform duration-[10000ms]`}
+            style={{ backgroundImage: `url(${scene.url})` }}
+          />
+        ))}
+
+        {/* Ambient Overlay Vignette & Dark Tint for Maximum Terminal Legibility */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/85 to-slate-950/75" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-slate-950/50 to-slate-950" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-xl space-y-5 my-auto pt-6 pb-4">
         {/* Header / Crest Branding */}
         <div className="text-center space-y-2">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-b from-amber-500/20 to-slate-900 border border-amber-500/40 shadow-xl shadow-amber-500/5">
@@ -569,6 +631,35 @@ export const LoginPage: React.FC<Props> = ({ onLoginSuccess, availableOfficers =
         <div className="text-center text-[11px] text-slate-500 space-y-1">
           <div>Kenya Data Protection Act 2019 • Article 49 Rights Compliance</div>
           <div>Protected by HttpOnly SameSite=Strict Server-Side Session Tokens</div>
+        </div>
+      </div>
+
+      {/* Police Operations & Initiatives Showcase Selector */}
+      <div className="relative z-10 pb-4 flex flex-col items-center gap-1.5 text-center">
+        <div className="flex flex-wrap items-center justify-center gap-1.5 p-1 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-800 text-xs shadow-xl">
+          <div className="px-2.5 py-1 text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            <span>Kenya Police in Action:</span>
+          </div>
+          {BACKGROUND_SCENES.map((scene, idx) => (
+            <button
+              key={scene.id}
+              type="button"
+              onClick={() => setActiveBgIndex(idx)}
+              className={`px-3 py-1 rounded-full text-[11px] font-medium transition-all cursor-pointer ${
+                activeBgIndex === idx
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              {scene.label}
+            </button>
+          ))}
+        </div>
+        <div className="text-[11px] font-mono text-slate-400 flex items-center gap-2">
+          <span className="text-amber-400 font-semibold">{BACKGROUND_SCENES[activeBgIndex].title}</span>
+          <span>•</span>
+          <span className="text-slate-400">{BACKGROUND_SCENES[activeBgIndex].subtitle}</span>
         </div>
       </div>
     </div>
